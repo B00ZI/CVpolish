@@ -49,18 +49,14 @@ Frontend note: Next.js 16 here differs from older versions — guides live in
 - [x] Root `.gitignore` created; `.env.example` created; `backend/__pycache__` deleted
 - [x] `GEMINI_API_KEY` env passthrough added to docker-compose backend service
 - [x] Fixed: `frontend/` had its own nested `.git` (create-next-app) → was staged as embedded repo, files would NOT have been pushed. Nested `.git` removed, all frontend files now tracked properly
+- [x] Hygiene pass complete (2026-10-29): CORS added in backend (allows http://localhost:3000), `python-multipart` added, all requirements pinned to latest stable, compose `version:` removed, db healthcheck added, backend waits for healthy db, `frentend` typo fixed
 
-### Problems found — fix first (2026-10-29)
-- [ ] No CORS middleware in backend → browser calls from :3000 to :8000 will be blocked
-- [ ] `python-multipart` missing from requirements.txt → PDF upload impossible
-- [ ] requirements.txt unpinned → pin versions to avoid surprise breaks
-- [ ] docker-compose: remove obsolete `version:` key, add db healthcheck
-- [ ] `DATABASE_URL` set in compose but unused by backend
-- [ ] Frontend still default template; no `NEXT_PUBLIC_API_URL` config
-- [ ] `package.json` name typo: `"frentend"` → `"frontend"`
+### Remaining problems (moved into next steps)
+- `DATABASE_URL` set in compose but unused by backend → fixed in step 2 (DB models)
+- Frontend still default template; no `NEXT_PUBLIC_API_URL` → fixed in step 5
 
 ### Next steps (planned order)
-- [ ] 1. Hygiene: git init, .gitignore, .env.example, pin requirements, fix compose (healthcheck, CORS, key env)
+- [x] 1. Hygiene: git init, .gitignore, .env.example, pin requirements, fix compose (healthcheck, CORS, key env) — DONE 2026-10-29
 - [ ] 2. Backend core (AI-free): SQLAlchemy models (CV, Section, Version) + pdfplumber upload/parse endpoint → structured JSON
 - [ ] 3. AI layer (optional): `ai.py` service wrapper — Gemini free tier, timeout, returns None on any failure; endpoints take a `use_ai` flag
 - [ ] 4. AI polish endpoints: rewrite bullets, tailor to job description, ATS keywords, summary generation
