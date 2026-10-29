@@ -69,15 +69,17 @@ Frontend note: Next.js 16 here differs from older versions — guides live in
 - [x] `GEMINI_API_KEY` env passthrough added to docker-compose backend service
 - [x] Fixed: `frontend/` had its own nested `.git` (create-next-app) → was staged as embedded repo, files would NOT have been pushed. Nested `.git` removed, all frontend files now tracked properly
 - [x] Hygiene pass complete (2026-10-29): CORS added in backend (allows http://localhost:3000), `python-multipart` added, all requirements pinned to latest stable, compose `version:` removed, db healthcheck added, backend waits for healthy db, `frentend` typo fixed
-- [x] UI plan approved + shadcn/ui installed (2026-10-29): Radix base, Nova preset, 10 components added, `npm run build` passes clean. NOTE: on this machine use `npx.cmd` / `npm.cmd` in PowerShell (execution policy blocks .ps1)
+- [x] UI plan approved + shadcn/ui installed (2026-10-29): Radix base, Nova preset, 10 components added, `npm run build` passes clean. NOTE: use `npx.cmd` / `npm.cmd` (PowerShell blocks .ps1; owner prefers cmd-style commands)
+- [x] Types + realistic mock data (2026-10-29): `lib/types.ts` (MasterProfile, Job, GapAnalysis, RewriteDiff, TailoredResult), `mock/profile.ts` (full tech-CV: contact, ~100-word summary, 5 skill groups, quantified bullets, 3 real-world projects, education, optional cert, 14 keywords), `mock/jobs.ts` (2 jobs: 76% match with gaps + 5 before/after rewrites; 91% completed), `mock/index.ts` barrel with delay helper. `tsc --noEmit` clean
 
 ### Remaining problems (moved into next steps)
-- `DATABASE_URL` set in compose but unused by backend → fixed in step 2 (DB models)
+- `DATABASE_URL` set in compose but unused by backend → fixed in step 4 (USER's backend work)
 - Frontend still default template; no `NEXT_PUBLIC_API_URL` → fixed in step 5
 
 ### Next steps (planned order) — FRONTEND FIRST (backend is owned by the user)
 - [x] 1. Hygiene: git init, .gitignore, .env.example, pin requirements, fix compose (healthcheck, CORS, key env) — DONE 2026-10-29
-- [ ] 2. Frontend prototype with mock data: main screens, layout, styling — until the look is approved
+- [x] 2a. Types + realistic mock data (tech-CV structure) — DONE 2026-10-29
+- [ ] 2b. Frontend prototype with mock data: main screens, layout, styling — until the look is approved (order: /profile → / → /jobs/new → /jobs/[id])
 - [ ] 3. Frontend polish: before/after suggestion view, loading states, dark mode, export/print view
 - [ ] 4. USER builds backend (learning Python): DB models, upload/parse endpoint, then AI layer
 - [ ] 5. Connect frontend to real API (replace mock data with fetch calls)
