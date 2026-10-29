@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { MasterProfile } from "@/lib/types";
+import { profileCompleteness } from "@/lib/completeness";
+import { clearProfile, loadProfile, saveProfile } from "@/lib/profile-store";
 import { mockProfile, withDelay } from "@/mock";
 import {
   CertificationsSection,
@@ -18,8 +20,6 @@ import {
   SkillsSection,
   SummarySection,
 } from "./profile-sections";
-
-const STORAGE_KEY = "cvpolish.profile.v1";
 
 const SECTIONS = [
   { id: "contact", label: "Contact" },
@@ -44,12 +44,7 @@ export function ProfileEditor() {
 
   // Load saved data after mount (avoids hydration mismatch).
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) setProfile(JSON.parse(raw) as MasterProfile);
-    } catch {
-      // corrupted storage -> keep mock data
-    }
+    setProfile(loadProfile());
     loaded.current = true;
   }, []);
 
@@ -62,11 +57,7 @@ export function ProfileEditor() {
     }
     setSaveState("saving");
     const t = setTimeout(() => {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(profile));
-      } catch {
-        // storage full/blocked -> ignore
-      }
+      saveProfile(profile);
       setSaveState("saved");
     }, 500);
     return () => clearTimeout(t);
@@ -104,32 +95,11 @@ export function ProfileEditor() {
     });
   }
 
-  const completeness = useMemo(() => {
-    const c = profile;
-    const checks = [
-      !!c.contact.fullName,
-      !!c.contact.targetTitle,
-      !!c.contact.email,
-      !!c.contact.phone,
-      !!c.contact.city,
-      !!c.contact.github,
-      !!c.contact.linkedin,
-      !!c.contact.portfolio,
-      c.summary.trim().length > 0,
-      c.skillGroups.some((g) => g.skills.length > 0),
-      c.experience.length > 0,
-      c.projects.length > 0,
-      c.education.length > 0,
-      c.keywords.length > 0,
-    ];
-    return Math.round(
-      (checks.filter(Boolean).length / checks.length) * 100,
-    );
-  }, [profile]);
+  const completeness = profileCompleteness(profile);
 
   function reset() {
     try {
-      localStorage.removeItem(STORAGE_KEY);
+      clearProfile();
     } catch {
       // ignore
     }

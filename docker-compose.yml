@@ -19,24 +19,41 @@ services:
     build: ./backend
     ports:
       - "8000:8000"
-    volumes:
-      - ./backend:/app
     environment:
       - DATABASE_URL=postgresql://user:password@db:5432/CVpolish
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
     depends_on:
       db:
         condition: service_healthy
+    develop:
+      watch:
+        - action: sync
+          path: ./backend
+          target: /app
+          ignore:
+            - __pycache__
+            - .venv
+            - "*.pyc"
 
   frontend:
     build: ./frontend
     ports:
       - "3000:3000"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
     depends_on:
       - backend
+    develop:
+      watch:
+        # Rebuild the image when dependencies change (new npm packages).
+        - action: rebuild
+          path: ./frontend/package.json
+        # Sync source files; writes happen from inside the container,
+        # so Next.js file watching / hot reload actually works.
+        - action: sync
+          path: ./frontend
+          target: /app
+          ignore:
+            - node_modules
+            - .next
 
 volumes:
   pgdata:

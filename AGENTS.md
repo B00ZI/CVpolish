@@ -73,11 +73,14 @@ Frontend note: Next.js 16 here differs from older versions — guides live in
 - [x] Types + realistic mock data (2026-10-29): `lib/types.ts` (MasterProfile, Job, GapAnalysis, RewriteDiff, TailoredResult), `mock/profile.ts` (full tech-CV: contact, ~100-word summary, 5 skill groups, quantified bullets, 3 real-world projects, education, optional cert, 14 keywords), `mock/jobs.ts` (2 jobs: 76% match with gaps + 5 before/after rewrites; 91% completed), `mock/index.ts` barrel with delay helper. `tsc --noEmit` clean
 - [x] `/profile` screen built (2026-10-29): 8 sections (contact, summary, skills, experience, projects, education, certifications, keywords), sticky side nav + scroll-spy, completeness %, autosave to localStorage ("Saved" indicator), mock AI buttons with spinner + toast, add/remove entries & chips, mobile chip nav. Font bug fixed (`--font-sans` was self-referencing → Times; now Geist). Verified in browser: all 8 sections, 50 inputs, 0 console errors
 - [x] Docker fixes for frontend dev (2026-10-29): frontend image rebuilt with shadcn deps; **anonymous `/app/node_modules` volume was stale — compose reuses it on recreate, must run `docker compose up -d --renew-anon-volumes frontend` after package.json changes**; stale `.next` cache cleared; added `frontend/.dockerignore` + `backend/.dockerignore` (build context was 200MB)
+- [x] `/` home screen built (2026-10-29): saved CV cards (title, company, match %, matched/missing dots, status badge, date), "New CV" CTA, profile completeness nudge (amber when <100%, quiet green check at 100%), empty state, header nav (CVPolish / Your CVs / Profile). Shared helpers extracted: `lib/profile-store.ts` (localStorage fake backend), `lib/completeness.ts`. Verified: 0 console errors
+- [x] Dev workflow switched to **`docker compose watch`** (2026-10-29): bind mounts REMOVED from backend+frontend (inotify does not propagate Windows → container, so hot reload was dead); `develop.watch` sync writes files from inside the container → proper file events. Rules: package.json change auto-rebuilds image (watch rule), Fast Refresh verified working (`[Fast Refresh] done`)
 
 ### Dev environment notes
-- The dev server runs **in Docker** (frontend on :3000, backend :8000, db :5432) — `docker compose ps` to check
-- Host `npm run dev` will fail with "port in use / another dev server" — that's the container; use `npm.cmd` on host only for `build`/`tsc` checks
-- After changing npm deps: `docker compose up -d --build --renew-anon-volumes frontend`
+- **Start dev with `docker compose watch`** (NOT plain `up` — without bind mounts, plain `up` serves image files only, no live source)
+- Frontend :3000, backend :8000, db :5432; `docker compose ps` to check
+- Host `npm.cmd` / `npx.cmd` still used for `tsc`/`build` checks (PowerShell blocks .ps1)
+- After adding npm packages on the host: watch rebuilds the image automatically (package.json rule); if watch isn't running: `docker compose build frontend`
 
 ### Remaining problems (moved into next steps)
 - `DATABASE_URL` set in compose but unused by backend → fixed in step 4 (USER's backend work)
@@ -86,7 +89,7 @@ Frontend note: Next.js 16 here differs from older versions — guides live in
 ### Next steps (planned order) — FRONTEND FIRST (backend is owned by the user)
 - [x] 1. Hygiene: git init, .gitignore, .env.example, pin requirements, fix compose (healthcheck, CORS, key env) — DONE 2026-10-29
 - [x] 2a. Types + realistic mock data (tech-CV structure) — DONE 2026-10-29
-- [ ] 2b. Frontend screens with mock data — until the look is approved. DONE: `/profile` ✅. Remaining: `/` home, `/jobs/new`, `/jobs/[id]` workspace
+- [ ] 2b. Frontend screens with mock data — until the look is approved. DONE: `/profile` ✅, `/` home ✅. Remaining: `/jobs/new`, `/jobs/[id]` workspace
 - [ ] 3. Frontend polish: before/after suggestion view, loading states, dark mode, export/print view
 - [ ] 4. USER builds backend (learning Python): DB models, upload/parse endpoint, then AI layer
 - [ ] 5. Connect frontend to real API (replace mock data with fetch calls)
