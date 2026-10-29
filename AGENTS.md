@@ -21,6 +21,25 @@ Read this file before doing anything. Update it when work is done.
 5. **Docker is the source of truth.** Everything must run with `docker compose up`.
 6. Keep replies and code comments short and in plain English.
 
+## Working style (decided 2026-10-29)
+
+- **Frontend first, with mock data.** The UI is built and styled using local mock/fake data so the look can be decided before any API exists. Mock data lives in `frontend/mock/` (or `frontend/lib/`), clearly marked.
+- **The owner writes the backend themselves to learn Python.** Do NOT write backend feature code (endpoints, models, AI logic). Help with hints, review, and fixes only when asked.
+- **Swap mock → real API later.** When the backend is ready, mock data gets replaced by real fetch calls. Design the frontend data shapes to match the future API so the swap is easy.
+
+## UI decisions (approved 2026-10-29)
+
+- **Style:** clean & minimal — light background, calm neutrals, one accent. The A4 CV preview is the visual star.
+- **Navigation:** 3 areas, 4 routes:
+  - `/` Home — saved CVs as cards (job title, match %, date) + "New CV" CTA + profile completeness nudge
+  - `/profile` — master data editor: **one long scroll + sticky side nav** (Contact, Summary, Experience, Projects, Skills, Education), explicit AI buttons for summary + keyword extraction
+  - `/jobs/new` — paste job description
+  - `/jobs/[id]` — job workspace with **tabs**: `Match & gaps` → `Rewrite` (before/after diff, accept/reject per bullet) → `Preview & PDF` (A4 template, click-to-edit, browser print)
+- **Missing keyword chips:** click → popover with "Add note" (context for AI) or "Add anyway".
+- **AI always explicit buttons**, never automatic on load (AI-optional rule).
+- **UI library: shadcn/ui (Radix base, Nova preset)** — components in `frontend/components/ui/`: button, input, textarea, label, tabs, card, badge, dialog, popover, sonner. Icons: lucide-react. Hand-build: A4 CV template + print CSS, before/after diff view.
+- **Mock phase persistence:** localStorage store so edits feel real with zero backend. Mock data in `frontend/mock/`, types in `frontend/lib/types.ts` shaped like the future API.
+
 ---
 
 ## Stack & structure
@@ -50,17 +69,18 @@ Frontend note: Next.js 16 here differs from older versions — guides live in
 - [x] `GEMINI_API_KEY` env passthrough added to docker-compose backend service
 - [x] Fixed: `frontend/` had its own nested `.git` (create-next-app) → was staged as embedded repo, files would NOT have been pushed. Nested `.git` removed, all frontend files now tracked properly
 - [x] Hygiene pass complete (2026-10-29): CORS added in backend (allows http://localhost:3000), `python-multipart` added, all requirements pinned to latest stable, compose `version:` removed, db healthcheck added, backend waits for healthy db, `frentend` typo fixed
+- [x] UI plan approved + shadcn/ui installed (2026-10-29): Radix base, Nova preset, 10 components added, `npm run build` passes clean. NOTE: on this machine use `npx.cmd` / `npm.cmd` in PowerShell (execution policy blocks .ps1)
 
 ### Remaining problems (moved into next steps)
 - `DATABASE_URL` set in compose but unused by backend → fixed in step 2 (DB models)
 - Frontend still default template; no `NEXT_PUBLIC_API_URL` → fixed in step 5
 
-### Next steps (planned order)
+### Next steps (planned order) — FRONTEND FIRST (backend is owned by the user)
 - [x] 1. Hygiene: git init, .gitignore, .env.example, pin requirements, fix compose (healthcheck, CORS, key env) — DONE 2026-10-29
-- [ ] 2. Backend core (AI-free): SQLAlchemy models (CV, Section, Version) + pdfplumber upload/parse endpoint → structured JSON
-- [ ] 3. AI layer (optional): `ai.py` service wrapper — Gemini free tier, timeout, returns None on any failure; endpoints take a `use_ai` flag
-- [ ] 4. AI polish endpoints: rewrite bullets, tailor to job description, ATS keywords, summary generation
-- [ ] 5. Frontend: upload page, CV editor, before/after suggestion view, export (print to PDF)
+- [ ] 2. Frontend prototype with mock data: main screens, layout, styling — until the look is approved
+- [ ] 3. Frontend polish: before/after suggestion view, loading states, dark mode, export/print view
+- [ ] 4. USER builds backend (learning Python): DB models, upload/parse endpoint, then AI layer
+- [ ] 5. Connect frontend to real API (replace mock data with fetch calls)
 - [ ] 6. Polish: loading states, error messages, dark mode
 
 ---
