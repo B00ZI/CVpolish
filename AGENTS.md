@@ -45,13 +45,16 @@ Frontend note: Next.js 16 here differs from older versions — guides live in
 
 ### Done
 - [x] Scaffold: docker-compose, FastAPI stub, Next.js template (pre-2026-10-29)
+- [x] Git repo initialized and pushed to https://github.com/B00ZI/CVpolish (2026-10-29)
+- [x] Root `.gitignore` created; `.env.example` created; `backend/__pycache__` deleted
+- [x] `GEMINI_API_KEY` env passthrough added to docker-compose backend service
+- [x] Fixed: `frontend/` had its own nested `.git` (create-next-app) → was staged as embedded repo, files would NOT have been pushed. Nested `.git` removed, all frontend files now tracked properly
 
 ### Problems found — fix first (2026-10-29)
 - [ ] No CORS middleware in backend → browser calls from :3000 to :8000 will be blocked
 - [ ] `python-multipart` missing from requirements.txt → PDF upload impossible
 - [ ] requirements.txt unpinned → pin versions to avoid surprise breaks
-- [ ] docker-compose: remove obsolete `version:` key, add db healthcheck, add env passthrough for `GEMINI_API_KEY`
-- [ ] No `.gitignore`, no `.env.example`, repo not under git, `__pycache__` in tree
+- [ ] docker-compose: remove obsolete `version:` key, add db healthcheck
 - [ ] `DATABASE_URL` set in compose but unused by backend
 - [ ] Frontend still default template; no `NEXT_PUBLIC_API_URL` config
 - [ ] `package.json` name typo: `"frentend"` → `"frontend"`
