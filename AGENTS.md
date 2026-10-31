@@ -81,6 +81,7 @@ Frontend note: Next.js 16 here differs from older versions — guides live in
 ### Dev environment notes
 - **Start dev with `docker compose watch`** (NOT plain `up` — without bind mounts, plain `up` serves image files only, no live source)
 - Frontend :3000, backend :8000, db :5432; `docker compose ps` to check
+- For host-side Python/Pylance checks, select `backend\.venv\Scripts\python.exe` in VS Code; Docker remains the app runtime
 - Host `npm.cmd` / `npx.cmd` still used for `tsc`/`build` checks (PowerShell blocks .ps1)
 - After adding npm packages on the host: watch rebuilds the image automatically (package.json rule); if watch isn't running: `docker compose build frontend`
 
@@ -92,7 +93,7 @@ Frontend note: Next.js 16 here differs from older versions — guides live in
 - [x] 1. Hygiene: git init, .gitignore, .env.example, pin requirements, fix compose (healthcheck, CORS, key env) — DONE 2026-10-29
 - [x] 2a. Types + realistic mock data (tech-CV structure) — DONE 2026-10-29
 - [x] 2b. Frontend screens with mock data — DONE 2026-10-31: `/` home ✅, `/profile` ✅, `/jobs/new` ✅, `/jobs/[id]` workspace ✅ (all 4 routes)
-- [ ] 3. Frontend polish: loading states, dark mode, edit-from-preview, edge cases (empty analysis, missing keywords)
+- [x] 3. Frontend polish — DONE 2026-10-31: dark mode (toggle in all headers, no-flash script), edit-from-preview (click-to-edit, routes to profile vs rewrite), edge cases (no analysis / empty matched / empty missing), loading via button spinners. No `app/loading.tsx` (breaks `/jobs/[id]` — see gotchas)
 - [ ] 4. USER builds backend (learning Python): DB models, upload/parse endpoint, then AI layer
 - [ ] 5. Connect frontend to real API (replace mock data with fetch calls)
 - [ ] 6. Polish: loading states, error messages, dark mode
