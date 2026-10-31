@@ -21,11 +21,12 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { toast } from "sonner";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
-import type { Job, MasterProfile, RewriteDiff } from "@/lib/types";
+import type { GapAnalysis, Job, MasterProfile, RewriteDiff } from "@/lib/types";
 import { getJob, upsertJob } from "@/lib/jobs-store";
-import { loadProfile } from "@/lib/profile-store";
-import { mockProfile, mockRewrites, withDelay } from "@/mock";
+import { loadProfile, saveProfile } from "@/lib/profile-store";
+import { mockAnalyze, mockProfile, mockRewrites, withDelay } from "@/mock";
 import { CvPreview } from "./cv-preview";
 
 const SECTION_LABEL: Record<RewriteDiff["section"], string> = {
@@ -39,6 +40,7 @@ export function Workspace({ jobId }: { jobId: string }) {
   const [profile, setProfile] = useState<MasterProfile>(mockProfile);
   const [tab, setTab] = useState("match");
   const [generating, setGenerating] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
 
   useEffect(() => {
     setProfile(loadProfile());
@@ -89,6 +91,14 @@ export function Workspace({ jobId }: { jobId: string }) {
     setGenerating(false);
   }
 
+  async function analyzeNow() {
+    if (analyzing) return;
+    setAnalyzing(true);
+    await withDelay(null, 1200);
+    mutate((j) => ({ ...j, analysis: mockAnalyze(j, profile) }));
+    setAnalyzing(false);
+  }
+
   function setRewrite(id: string, accepted: boolean) {
     mutate((j) => ({
       ...j,
@@ -116,9 +126,12 @@ export function Workspace({ jobId }: { jobId: string }) {
               {job.company ? ` @ ${job.company}` : ""}
             </span>
           </div>
-          <Badge variant="secondary" className="print:hidden">
-            {job.status === "tailed" ? "Ready to print" : "In progress"}
-          </Badge>
+          <div className="flex items-center gap-2 print:hidden">
+            <Badge variant="secondary">
+              {job.status === "tailed" ? "Ready to print" : "In progress"}
+            </Badge>
+            <ThemeToggle />
+          </div>
         </div>
       </header>
 
@@ -132,83 +145,50 @@ export function Workspace({ jobId }: { jobId: string }) {
 
           {/* ===== Tab 1: Match & gaps ===== */}
           <TabsContent value="match" className="mt-6 space-y-8">
-            {/* Score */}
-            <div className="flex items-center gap-6 rounded-xl border border-border p-6">
-              <div className="text-center">
-                <p className="text-4xl font-medium tabular-nums tracking-tight">
-                  {job.analysis?.score ?? 0}%
+            {job.analysis ? (
+              <AnalysisBlock
+                analysis={job.analysis}
+                onSaveNote={(kw, note) =>
+                  mutate((j) => ({
+                    ...j,
+                    analysis: j.analysis
+                      ? {
+                          ...j.analysis,
+                          notes: { ...j.analysis.notes, [kw]: note },
+                        }
+                      : j.analysis,
+                  }))
+                }
+                onAddAnyway={(kw) =>
+                  mutate((j) => ({
+                    ...j,
+                    analysis: j.analysis
+                      ? { ...j.analysis, added: [...j.analysis.added, kw] }
+                      : j.analysis,
+                  }))
+                }
+              />
+            ) : (
+              <div className="rounded-xl border border-dashed border-border p-12 text-center">
+                <h2 className="text-base font-medium">No analysis yet</h2>
+                <p className="mx-auto mt-1.5 max-w-md text-sm text-muted-foreground">
+                  Compare this job description against your profile to see the
+                  match score and missing keywords.
                 </p>
-                <p className="mt-0.5 text-xs text-muted-foreground">match</p>
+                <Button
+                  className="mt-5"
+                  onClick={analyzeNow}
+                  disabled={analyzing}
+                >
+                  {analyzing ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-4 w-4 text-blue-600" />
+                  )}
+                  {analyzing ? "Analyzing…" : "Analyze match"}
+                </Button>
               </div>
-              <div className="min-w-0 flex-1">
-                <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                  <div
-                    className="h-full rounded-full bg-foreground transition-all duration-500"
-                    style={{ width: `${job.analysis?.score ?? 0}%` }}
-                  />
-                </div>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  {job.analysis?.matched.length ?? 0} matched ·{" "}
-                  {job.analysis?.missing.length ?? 0} missing keywords
-                </p>
-              </div>
-            </div>
-
-            {/* Matched */}
-            <section>
-              <h2 className="text-base font-medium">You already have</h2>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {job.analysis?.matched.map((kw) => (
-                  <span
-                    key={kw}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 py-1 pl-2.5 pr-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300"
-                  >
-                    <Check className="h-3 w-3" />
-                    {kw}
-                  </span>
-                ))}
-              </div>
-            </section>
-
-            {/* Missing */}
-            <section>
-              <h2 className="text-base font-medium">Missing from your data</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Click a keyword: add context for the AI, or force it in.
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {job.analysis?.missing.map((kw) => (
-                  <MissingChip
-                    key={kw}
-                    keyword={kw}
-                    note={job.analysis?.notes[kw]}
-                    added={job.analysis?.added.includes(kw) ?? false}
-                    onSaveNote={(note) =>
-                      mutate((j) => ({
-                        ...j,
-                        analysis: j.analysis
-                          ? {
-                              ...j.analysis,
-                              notes: { ...j.analysis.notes, [kw]: note },
-                            }
-                          : j.analysis,
-                      }))
-                    }
-                    onAddAnyway={() =>
-                      mutate((j) => ({
-                        ...j,
-                        analysis: j.analysis
-                          ? {
-                              ...j.analysis,
-                              added: [...j.analysis.added, kw],
-                            }
-                          : j.analysis,
-                      }))
-                    }
-                  />
-                ))}
-              </div>
-            </section>
+            )}
 
             {/* Notes for the AI */}
             {Object.entries(job.analysis?.notes ?? {}).length > 0 && (
@@ -354,11 +334,114 @@ export function Workspace({ jobId }: { jobId: string }) {
               profile={profile}
               job={job}
               onPrint={() => window.print()}
+              onEditProfile={(fn) => {
+                const next = fn(profile);
+                setProfile(next);
+                saveProfile(next);
+              }}
+              onEditRewrite={(rewriteId, text) =>
+                mutate((j) => ({
+                  ...j,
+                  rewrites: j.rewrites.map((r) =>
+                    r.id === rewriteId ? { ...r, rewritten: text } : r,
+                  ),
+                }))
+              }
             />
           </TabsContent>
         </Tabs>
       </main>
     </div>
+  );
+}
+
+// ===== Score + keyword chips (empty states included) =====
+
+function AnalysisBlock({
+  analysis,
+  onSaveNote,
+  onAddAnyway,
+}: {
+  analysis: GapAnalysis;
+  onSaveNote: (keyword: string, note: string) => void;
+  onAddAnyway: (keyword: string) => void;
+}) {
+  return (
+    <>
+      {/* Score */}
+      <div className="flex items-center gap-6 rounded-xl border border-border p-6">
+        <div className="text-center">
+          <p className="text-4xl font-medium tabular-nums tracking-tight">
+            {analysis.score}%
+          </p>
+          <p className="mt-0.5 text-xs text-muted-foreground">match</p>
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-foreground transition-all duration-500"
+              style={{ width: `${analysis.score}%` }}
+            />
+          </div>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {analysis.matched.length} matched · {analysis.missing.length}{" "}
+            missing keywords
+          </p>
+        </div>
+      </div>
+
+      {/* Matched */}
+      <section>
+        <h2 className="text-base font-medium">You already have</h2>
+        {analysis.matched.length === 0 ? (
+          <p className="mt-1.5 text-sm text-muted-foreground">
+            None of your keywords appear in this description — paste the full
+            requirements section?
+          </p>
+        ) : (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {analysis.matched.map((kw) => (
+              <span
+                key={kw}
+                className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 py-1 pl-2.5 pr-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300"
+              >
+                <Check className="h-3 w-3" />
+                {kw}
+              </span>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Missing */}
+      <section>
+        <h2 className="text-base font-medium">Missing from your data</h2>
+        {analysis.missing.length === 0 ? (
+          <p className="mt-1.5 flex items-center gap-1.5 text-sm text-emerald-700 dark:text-emerald-400">
+            <Check className="h-3.5 w-3.5" />
+            You cover every keyword this job lists.
+          </p>
+        ) : (
+          <>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Click a keyword: add context for the AI, or force it in.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {analysis.missing.map((kw) => (
+                <MissingChip
+                  key={kw}
+                  keyword={kw}
+                  note={analysis.notes[kw]}
+                  added={analysis.added.includes(kw)}
+                  onSaveNote={(note) => onSaveNote(kw, note)}
+                  onAddAnyway={() => onAddAnyway(kw)}
+                />
+              ))}
+            </div>
+          </>
+        )}
+      </section>
+    </>
   );
 }
 

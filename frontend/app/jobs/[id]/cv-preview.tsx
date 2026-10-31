@@ -1,11 +1,101 @@
 "use client";
 
+import { useRef, useState } from "react";
 import { Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import type { Job, MasterProfile } from "@/lib/types";
 
 function fmtRange(start: string, end?: string | null): string {
   return `${start} — ${end ?? "Present"}`;
+}
+
+/** Click-to-edit text: renders as plain text until clicked, then a small
+ *  textarea. Enter or blur saves, Escape cancels. Writes go through onSave
+ *  (the parent persists them to the profile store). */
+function Editable({
+  value,
+  onSave,
+  className,
+  block = false,
+}: {
+  value: string;
+  onSave: (v: string) => void;
+  className?: string;
+  block?: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const skipBlur = useRef(false);
+
+  function open() {
+    setDraft(value);
+    skipBlur.current = false;
+    setEditing(true);
+  }
+
+  function commit() {
+    const v = draft.trim();
+    if (v && v !== value) onSave(v);
+    skipBlur.current = true;
+    setEditing(false);
+  }
+
+  if (!editing) {
+    return (
+      <span
+        role="button"
+        tabIndex={0}
+        title="Click to edit"
+        onClick={open}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            open();
+          }
+        }}
+        className={cn(
+          "cursor-text rounded-sm transition-colors hover:bg-neutral-100 hover:outline hover:outline-1 hover:outline-neutral-300 dark:hover:bg-white/10 dark:hover:outline-white/25",
+          className,
+        )}
+      >
+        {value}
+      </span>
+    );
+  }
+
+  return (
+    <textarea
+      autoFocus
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => {
+        if (skipBlur.current) return;
+        commit();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          skipBlur.current = true;
+          setEditing(false);
+        } else if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          commit();
+        }
+      }}
+      rows={Math.min(6, Math.max(2, Math.ceil(draft.length / 60)))}
+      className={cn(
+        "w-full resize-none rounded-sm bg-white p-0.5 text-neutral-900 ring-2 ring-blue-600 outline-hidden [font-family:inherit] [font-size:inherit]",
+        block ? "block" : "inline-block",
+        className,
+      )}
+    />
+  );
+}
+
+/** A line of text in the preview + where it came from (rewrite or profile). */
+interface Displayed {
+  text: string;
+  rewriteId?: string;
 }
 
 /** Apply accepted rewrites on top of the master profile. */
@@ -13,7 +103,9 @@ function tailor(profile: MasterProfile, job: Job) {
   const accepted = job.rewrites.filter((r) => r.accepted === true);
 
   const summaryDiff = accepted.find((r) => r.section === "summary");
-  const summary = summaryDiff ? summaryDiff.rewritten : profile.summary;
+  const summary: Displayed = summaryDiff
+    ? { text: summaryDiff.rewritten, rewriteId: summaryDiff.id }
+    : { text: profile.summary };
 
   const experience = profile.experience.map((exp) => {
     const reps = accepted.filter(
@@ -21,9 +113,12 @@ function tailor(profile: MasterProfile, job: Job) {
     );
     return {
       ...exp,
-      bullets: exp.bullets.map(
-        (b) => reps.find((r) => r.original === b)?.rewritten ?? b,
-      ),
+      bullets: exp.bullets.map((b): Displayed => {
+        const rep = reps.find((r) => r.original === b);
+        return rep
+          ? { text: rep.rewritten, rewriteId: rep.id }
+          : { text: b };
+      }),
     };
   });
 
@@ -33,9 +128,12 @@ function tailor(profile: MasterProfile, job: Job) {
     );
     return {
       ...prj,
-      bullets: prj.bullets.map(
-        (b) => reps.find((r) => r.original === b)?.rewritten ?? b,
-      ),
+      bullets: prj.bullets.map((b): Displayed => {
+        const rep = reps.find((r) => r.original === b);
+        return rep
+          ? { text: rep.rewritten, rewriteId: rep.id }
+          : { text: b };
+      }),
     };
   });
 
@@ -46,10 +144,16 @@ export function CvPreview({
   profile,
   job,
   onPrint,
+  onEditProfile,
+  onEditRewrite,
 }: {
   profile: MasterProfile;
   job: Job;
   onPrint: () => void;
+  /** Persist an edit to the master profile. */
+  onEditProfile: (fn: (p: MasterProfile) => MasterProfile) => void;
+  /** Persist an edit to an accepted rewrite (text shown came from it). */
+  onEditRewrite: (rewriteId: string, text: string) => void;
 }) {
   const { summary, experience, projects } = tailor(profile, job);
   const c = profile.contact;
@@ -65,7 +169,7 @@ export function CvPreview({
       {/* Toolbar — hidden on paper */}
       <div className="mb-4 flex items-center justify-between gap-4 print:hidden">
         <p className="text-sm text-muted-foreground">
-          Exactly what gets printed.
+          Click any text to edit your profile. Then print or save as PDF.
         </p>
         <Button onClick={onPrint}>
           <Printer className="h-4 w-4" />
@@ -81,10 +185,26 @@ export function CvPreview({
         {/* Name block */}
         <header>
           <h1 className="text-2xl font-semibold tracking-tight">
-            {c.fullName}
+            <Editable
+              value={c.fullName}
+              onSave={(v) =>
+                onEditProfile((p) => ({
+                  ...p,
+                  contact: { ...p.contact, fullName: v },
+                }))
+              }
+            />
           </h1>
           <p className="mt-0.5 text-sm text-neutral-600">
-            {c.targetTitle}
+            <Editable
+              value={c.targetTitle}
+              onSave={(v) =>
+                onEditProfile((p) => ({
+                  ...p,
+                  contact: { ...p.contact, targetTitle: v },
+                }))
+              }
+            />
           </p>
           {contactLine && (
             <p className="mt-2 text-xs text-neutral-500">{contactLine}</p>
@@ -95,9 +215,19 @@ export function CvPreview({
         </header>
 
         {/* Summary */}
-        {summary && (
+        {summary.text && (
           <Section title="Summary">
-            <p>{summary}</p>
+            <p>
+              <Editable
+                block
+                value={summary.text}
+                onSave={(v) =>
+                  summary.rewriteId
+                    ? onEditRewrite(summary.rewriteId, v)
+                    : onEditProfile((p) => ({ ...p, summary: v }))
+                }
+              />
+            </p>
           </Section>
         )}
 
@@ -122,7 +252,29 @@ export function CvPreview({
                   </div>
                   <ul className="mt-1 list-disc space-y-0.5 pl-5">
                     {exp.bullets.map((b, i) => (
-                      <li key={i}>{b}</li>
+                      <li key={i}>
+                        <Editable
+                          block
+                          value={b.text}
+                          onSave={(v) =>
+                            b.rewriteId
+                              ? onEditRewrite(b.rewriteId, v)
+                              : onEditProfile((p) => ({
+                                  ...p,
+                                  experience: p.experience.map((e) =>
+                                    e.id === exp.id
+                                      ? {
+                                          ...e,
+                                          bullets: e.bullets.map((eb, bi) =>
+                                            bi === i ? v : eb,
+                                          ),
+                                        }
+                                      : e,
+                                  ),
+                                }))
+                          }
+                        />
+                      </li>
                     ))}
                   </ul>
                 </li>
@@ -156,7 +308,29 @@ export function CvPreview({
                   )}
                   <ul className="mt-0.5 list-disc space-y-0.5 pl-5">
                     {prj.bullets.map((b, i) => (
-                      <li key={i}>{b}</li>
+                      <li key={i}>
+                        <Editable
+                          block
+                          value={b.text}
+                          onSave={(v) =>
+                            b.rewriteId
+                              ? onEditRewrite(b.rewriteId, v)
+                              : onEditProfile((p) => ({
+                                  ...p,
+                                  projects: p.projects.map((pr) =>
+                                    pr.id === prj.id
+                                      ? {
+                                          ...pr,
+                                          bullets: pr.bullets.map((pb, pi) =>
+                                            pi === i ? v : pb,
+                                          ),
+                                        }
+                                      : pr,
+                                  ),
+                                }))
+                          }
+                        />
+                      </li>
                     ))}
                   </ul>
                 </li>
