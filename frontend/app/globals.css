@@ -135,3 +135,16 @@
     }
   }
 }
+
+/* ===== Print / Save-as-PDF (A4) ===== */
+@page {
+  size: A4;
+  margin: 14mm;
+}
+
+@media print {
+  html,
+  body {
+    background: white;
+  }
+}

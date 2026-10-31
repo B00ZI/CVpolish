@@ -75,6 +75,8 @@ Frontend note: Next.js 16 here differs from older versions — guides live in
 - [x] Docker fixes for frontend dev (2026-10-29): frontend image rebuilt with shadcn deps; **anonymous `/app/node_modules` volume was stale — compose reuses it on recreate, must run `docker compose up -d --renew-anon-volumes frontend` after package.json changes**; stale `.next` cache cleared; added `frontend/.dockerignore` + `backend/.dockerignore` (build context was 200MB)
 - [x] `/` home screen built (2026-10-29): saved CV cards (title, company, match %, matched/missing dots, status badge, date), "New CV" CTA, profile completeness nudge (amber when <100%, quiet green check at 100%), empty state, header nav (CVPolish / Your CVs / Profile). Shared helpers extracted: `lib/profile-store.ts` (localStorage fake backend), `lib/completeness.ts`. Verified: 0 console errors
 - [x] Dev workflow switched to **`docker compose watch`** (2026-10-29): bind mounts REMOVED from backend+frontend (inotify does not propagate Windows → container, so hot reload was dead); `develop.watch` sync writes files from inside the container → proper file events. Rules: package.json change auto-rebuilds image (watch rule), Fast Refresh verified working (`[Fast Refresh] done`)
+- [x] `/jobs/new` screen built (2026-10-31): paste JD + title/company/location, `mockAnalyze()` fake analysis (profile keywords found in the JD text), 1.4s mock delay, saves to `lib/jobs-store.ts` (localStorage `cvpolish.jobs.v1`) then navigates to workspace. Analyze gated on title + JD
+- [x] `/jobs/[id]` workspace built (2026-10-31): 3 tabs — **Match & gaps** (score bar, matched chips, missing chips → popover "Save note"/"Add anyway", notes list), **Rewrite** (`mockRewrites()` template diffs, accept/reject per bullet, Accept all, counter), **Preview & PDF** (A4 `cv-preview.tsx` applies accepted rewrites over profile, Print/Save-as-PDF via `window.print()`, `@page A4` + `print:hidden` chrome in globals.css). Jobs persist across reload; home switched from `mockJobs` to `loadJobs()`. Next 16 gotcha: `params` must be read inside `<Suspense>` or dev logs "runtime data during prerendering" — fixed in `app/jobs/[id]/page.tsx`. Verified end-to-end (create → analyze → note → add anyway → generate → accept → preview → reload), 0 console errors
 
 ### Dev environment notes
 - **Start dev with `docker compose watch`** (NOT plain `up` — without bind mounts, plain `up` serves image files only, no live source)
@@ -89,8 +91,8 @@ Frontend note: Next.js 16 here differs from older versions — guides live in
 ### Next steps (planned order) — FRONTEND FIRST (backend is owned by the user)
 - [x] 1. Hygiene: git init, .gitignore, .env.example, pin requirements, fix compose (healthcheck, CORS, key env) — DONE 2026-10-29
 - [x] 2a. Types + realistic mock data (tech-CV structure) — DONE 2026-10-29
-- [ ] 2b. Frontend screens with mock data — until the look is approved. DONE: `/profile` ✅, `/` home ✅. Remaining: `/jobs/new`, `/jobs/[id]` workspace
-- [ ] 3. Frontend polish: before/after suggestion view, loading states, dark mode, export/print view
+- [x] 2b. Frontend screens with mock data — DONE 2026-10-31: `/` home ✅, `/profile` ✅, `/jobs/new` ✅, `/jobs/[id]` workspace ✅ (all 4 routes)
+- [ ] 3. Frontend polish: loading states, dark mode, edit-from-preview, edge cases (empty analysis, missing keywords)
 - [ ] 4. USER builds backend (learning Python): DB models, upload/parse endpoint, then AI layer
 - [ ] 5. Connect frontend to real API (replace mock data with fetch calls)
 - [ ] 6. Polish: loading states, error messages, dark mode

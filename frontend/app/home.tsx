@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import type { Job, MasterProfile } from "@/lib/types";
 import { profileCompleteness } from "@/lib/completeness";
 import { loadProfile } from "@/lib/profile-store";
+import { loadJobs } from "@/lib/jobs-store";
 import { mockJobs, mockProfile } from "@/mock";
 
 const STATUS_LABEL: Record<Job["status"], string> = {
@@ -34,11 +35,12 @@ function formatDate(iso: string): string {
 
 export function Home() {
   const [profile, setProfile] = useState<MasterProfile>(mockProfile);
-  const [jobs] = useState<Job[]>(mockJobs);
+  const [jobs, setJobs] = useState<Job[]>(mockJobs);
 
-  // Load saved profile after mount (avoids hydration mismatch).
+  // Load saved profile + jobs after mount (avoids hydration mismatch).
   useEffect(() => {
     setProfile(loadProfile());
+    setJobs(loadJobs());
   }, []);
 
   const completeness = profileCompleteness(profile);
