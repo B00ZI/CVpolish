@@ -180,7 +180,7 @@ export function CvPreview({
       {/* A4 sheet */}
       <article
         id="cv-preview"
-        className="mx-auto rounded-lg border border-border bg-white p-10 text-[13px] leading-relaxed text-neutral-900 shadow-sm print:rounded-none print:border-0 print:p-[12mm_14mm] print:shadow-none"
+        className="mx-auto rounded-lg border border-border bg-white p-10 text-[13px] leading-relaxed text-neutral-900 shadow-sm print:rounded-none print:border-0 print:p-[8mm_10mm] print:shadow-none"
       >
         {/* Name block */}
         <header>
