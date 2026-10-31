@@ -180,7 +180,7 @@ export function CvPreview({
       {/* A4 sheet */}
       <article
         id="cv-preview"
-        className="mx-auto rounded-lg border border-border bg-white p-10 text-[13px] leading-relaxed text-neutral-900 shadow-sm print:rounded-none print:border-0 print:p-0 print:shadow-none"
+        className="mx-auto rounded-lg border border-border bg-white p-10 text-[13px] leading-relaxed text-neutral-900 shadow-sm print:rounded-none print:border-0 print:p-[12mm_14mm] print:shadow-none"
       >
         {/* Name block */}
         <header>
@@ -346,7 +346,25 @@ export function CvPreview({
               {profile.skillGroups.map((g) => (
                 <li key={g.id}>
                   <span className="font-medium">{g.category}: </span>
-                  {g.skills.join(", ")}
+                  <Editable
+                    value={g.skills.join(", ")}
+                    onSave={(v) =>
+                      onEditProfile((p) => ({
+                        ...p,
+                        skillGroups: p.skillGroups.map((sg) =>
+                          sg.id === g.id
+                            ? {
+                                ...sg,
+                                skills: v
+                                  .split(",")
+                                  .map((s) => s.trim())
+                                  .filter(Boolean),
+                              }
+                            : sg,
+                        ),
+                      }))
+                    }
+                  />
                 </li>
               ))}
             </ul>
@@ -363,12 +381,79 @@ export function CvPreview({
                   className="flex items-baseline justify-between gap-4"
                 >
                   <p>
-                    <span className="font-medium">{ed.degree}</span>
-                    {ed.major ? ` in ${ed.major}` : ""}, {ed.university}
-                    {ed.location ? ` (${ed.location})` : ""}
+                    <Editable
+                      className="font-medium"
+                      value={ed.degree}
+                      onSave={(v) =>
+                        onEditProfile((p) => ({
+                          ...p,
+                          education: p.education.map((e2) =>
+                            e2.id === ed.id ? { ...e2, degree: v } : e2,
+                          ),
+                        }))
+                      }
+                    />
+                    {ed.major ? (
+                      <>
+                        {" in "}
+                        <Editable
+                          value={ed.major}
+                          onSave={(v) =>
+                            onEditProfile((p) => ({
+                              ...p,
+                              education: p.education.map((e2) =>
+                                e2.id === ed.id ? { ...e2, major: v } : e2,
+                              ),
+                            }))
+                          }
+                        />
+                      </>
+                    ) : null}
+                    {", "}
+                    <Editable
+                      value={ed.university}
+                      onSave={(v) =>
+                        onEditProfile((p) => ({
+                          ...p,
+                          education: p.education.map((e2) =>
+                            e2.id === ed.id ? { ...e2, university: v } : e2,
+                          ),
+                        }))
+                      }
+                    />
+                    {ed.location ? (
+                      <>
+                        {" ("}
+                        <Editable
+                          value={ed.location}
+                          onSave={(v) =>
+                            onEditProfile((p) => ({
+                              ...p,
+                              education: p.education.map((e2) =>
+                                e2.id === ed.id ? { ...e2, location: v } : e2,
+                              ),
+                            }))
+                          }
+                        />
+                        {")"}
+                      </>
+                    ) : null}
                   </p>
                   <p className="shrink-0 text-xs text-neutral-500">
-                    Class of {ed.graduationYear}
+                    Class of{" "}
+                    <Editable
+                      value={ed.graduationYear}
+                      onSave={(v) =>
+                        onEditProfile((p) => ({
+                          ...p,
+                          education: p.education.map((e2) =>
+                            e2.id === ed.id
+                              ? { ...e2, graduationYear: v }
+                              : e2,
+                          ),
+                        }))
+                      }
+                    />
                   </p>
                 </li>
               ))}
@@ -382,9 +467,51 @@ export function CvPreview({
             <ul className="space-y-0.5">
               {profile.certifications.map((cert, i) => (
                 <li key={i}>
-                  <span className="font-medium">{cert.name}</span>
-                  {cert.issuer ? ` — ${cert.issuer}` : ""}
-                  {cert.year ? ` (${cert.year})` : ""}
+                  <Editable
+                    className="font-medium"
+                    value={cert.name}
+                    onSave={(v) =>
+                      onEditProfile((p) => ({
+                        ...p,
+                        certifications: p.certifications.map((c2, ci) =>
+                          ci === i ? { ...c2, name: v } : c2,
+                        ),
+                      }))
+                    }
+                  />
+                  {cert.issuer ? (
+                    <>
+                      {" — "}
+                      <Editable
+                        value={cert.issuer}
+                        onSave={(v) =>
+                          onEditProfile((p) => ({
+                            ...p,
+                            certifications: p.certifications.map((c2, ci) =>
+                              ci === i ? { ...c2, issuer: v } : c2,
+                            ),
+                          }))
+                        }
+                      />
+                    </>
+                  ) : null}
+                  {cert.year ? (
+                    <>
+                      {" ("}
+                      <Editable
+                        value={cert.year}
+                        onSave={(v) =>
+                          onEditProfile((p) => ({
+                            ...p,
+                            certifications: p.certifications.map((c2, ci) =>
+                              ci === i ? { ...c2, year: v } : c2,
+                            ),
+                          }))
+                        }
+                      />
+                      {")"}
+                    </>
+                  ) : null}
                 </li>
               ))}
             </ul>

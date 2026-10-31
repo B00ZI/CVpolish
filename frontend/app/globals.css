@@ -139,9 +139,11 @@
 }
 
 /* ===== Print / Save-as-PDF (A4) ===== */
+/* margin 0 makes Chrome omit its automatic page headers/footers
+   (date, page title, URL) — the sheet adds its own padding instead */
 @page {
   size: A4;
-  margin: 14mm;
+  margin: 0;
 }
 
 @media print {
