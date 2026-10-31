@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { Job, MasterProfile } from "@/lib/types";
 import { profileCompleteness } from "@/lib/completeness";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { loadProfile } from "@/lib/profile-store";
 import { loadJobs } from "@/lib/jobs-store";
 import { mockJobs, mockProfile } from "@/mock";
@@ -69,6 +70,7 @@ export function Home() {
             >
               Profile
             </Link>
+            <ThemeToggle />
           </nav>
         </div>
       </header>

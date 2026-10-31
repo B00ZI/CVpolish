@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import type { MasterProfile } from "@/lib/types";
 import { profileCompleteness } from "@/lib/completeness";
 import { clearProfile, loadProfile, saveProfile } from "@/lib/profile-store";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { mockProfile, withDelay } from "@/mock";
 import {
   CertificationsSection,
@@ -135,6 +136,7 @@ export function ProfileEditor() {
             <Button variant="ghost" size="sm" className="text-xs" onClick={reset}>
               Reset data
             </Button>
+            <ThemeToggle />
           </div>
         </div>
       </header>

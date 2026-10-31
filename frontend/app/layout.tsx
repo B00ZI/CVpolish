@@ -24,8 +24,19 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      // theme script may add .dark before hydration — expected mismatch
+      suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">
+        {/* Apply saved theme before paint (no flash). Plain inline script at
+            the top of <body> keeps server/client trees identical.
+            Keep in sync with components/theme-toggle.tsx */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              '(function(){try{var t=localStorage.getItem("cvpolish.theme");var d=t?t==="dark":window.matchMedia("(prefers-color-scheme: dark)").matches;if(d)document.documentElement.classList.add("dark")}catch(e){}})()',
+          }}
+        />
         {children}
         <Toaster position="top-center" />
       </body>

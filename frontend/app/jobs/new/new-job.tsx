@@ -11,6 +11,7 @@ import type { Job } from "@/lib/types";
 import { loadProfile } from "@/lib/profile-store";
 import { upsertJob } from "@/lib/jobs-store";
 import { mockAnalyze, withDelay } from "@/mock";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export function NewJob() {
   const router = useRouter();
@@ -47,7 +48,7 @@ export function NewJob() {
     <div className="min-h-screen">
       {/* Top bar */}
       <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-3xl items-center px-6">
+        <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-6">
           <Link
             href="/"
             className="flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
@@ -55,6 +56,7 @@ export function NewJob() {
             <ArrowLeft className="h-3.5 w-3.5" />
             Your CVs
           </Link>
+          <ThemeToggle />
         </div>
       </header>
 
