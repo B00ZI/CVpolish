@@ -151,4 +151,10 @@
   body {
     background: white;
   }
+  /* Chrome treats flex rows (e.g. education lines) as monolithic and
+     pushes them wholesale to the next page — let them flow instead */
+  #cv-preview .flex,
+  #cv-preview li {
+    break-inside: auto;
+  }
 }

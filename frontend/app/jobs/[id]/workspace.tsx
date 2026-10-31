@@ -109,7 +109,7 @@ export function Workspace({ jobId }: { jobId: string }) {
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen print:min-h-0">
       {/* Top bar */}
       <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur print:hidden">
         <div className="mx-auto flex h-14 max-w-4xl items-center justify-between gap-4 px-6">
@@ -135,7 +135,7 @@ export function Workspace({ jobId }: { jobId: string }) {
         </div>
       </header>
 
-      <main className="mx-auto max-w-4xl px-6 pb-24 pt-8">
+      <main className="mx-auto max-w-4xl px-6 pb-24 pt-8 print:p-0">
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList className="print:hidden">
             <TabsTrigger value="match">Match & gaps</TabsTrigger>
@@ -329,7 +329,7 @@ export function Workspace({ jobId }: { jobId: string }) {
           </TabsContent>
 
           {/* ===== Tab 3: Preview & PDF ===== */}
-          <TabsContent value="preview" className="mt-6">
+          <TabsContent value="preview" className="mt-6 print:mt-0">
             <CvPreview
               profile={profile}
               job={job}
