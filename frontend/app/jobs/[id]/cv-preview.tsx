@@ -180,10 +180,10 @@ export function CvPreview({
       {/* A4 sheet */}
       <article
         id="cv-preview"
-        className="mx-auto rounded-lg border border-border bg-white p-10 text-[13px] leading-relaxed text-neutral-900 shadow-sm print:rounded-none print:border-0 print:p-[8mm_10mm] print:shadow-none"
+        className="mx-auto rounded-lg border border-border bg-white p-10 text-[13px] leading-relaxed font-[450] text-neutral-900 shadow-sm print:rounded-none print:border-0 print:p-[8mm_10mm] print:shadow-none"
       >
-        {/* Name block */}
-        <header>
+        {/* Name block — centered */}
+        <header className="text-center">
           <h1 className="text-2xl font-semibold tracking-tight">
             <Editable
               value={c.fullName}
@@ -207,10 +207,10 @@ export function CvPreview({
             />
           </p>
           {contactLine && (
-            <p className="mt-2 text-xs text-neutral-500">{contactLine}</p>
+            <p className="mt-2 text-xs text-neutral-600">{contactLine}</p>
           )}
           {linksLine && (
-            <p className="text-xs break-all text-neutral-500">{linksLine}</p>
+            <p className="text-xs break-all text-neutral-600">{linksLine}</p>
           )}
         </header>
 
@@ -238,19 +238,19 @@ export function CvPreview({
               {experience.map((exp) => (
                 <li key={exp.id}>
                   <div className="flex items-baseline justify-between gap-4">
-                    <p className="font-medium">
+                    <p className="font-semibold">
                       {exp.jobTitle}
-                      <span className="font-normal text-neutral-600">
+                      <span className="font-normal text-neutral-700">
                         {" "}
                         — {exp.company}
                         {exp.location ? `, ${exp.location}` : ""}
                       </span>
                     </p>
-                    <p className="shrink-0 text-xs text-neutral-500">
+                    <p className="shrink-0 text-xs text-neutral-600">
                       {fmtRange(exp.startDate, exp.endDate)}
                     </p>
                   </div>
-                  <ul className="mt-1 list-disc space-y-0.5 pl-5">
+                  <ul className="mt-1.5 list-disc space-y-1 pl-5">
                     {exp.bullets.map((b, i) => (
                       <li key={i}>
                         <Editable
@@ -286,27 +286,27 @@ export function CvPreview({
         {/* Projects */}
         {projects.length > 0 && (
           <Section title="Projects">
-            <ul className="space-y-3.5">
+            <ul className="space-y-4">
               {projects.map((prj) => (
                 <li key={prj.id}>
-                  <p className="font-medium">
+                  <p className="font-semibold">
                     {prj.name}
                     {prj.links.map((l) => (
                       <span
                         key={l.url}
-                        className="ml-2 font-normal text-xs text-neutral-500"
+                        className="ml-2 font-normal text-xs text-neutral-600"
                       >
                         {l.label}: {l.url}
                       </span>
                     ))}
                   </p>
-                  <p className="text-neutral-700">{prj.description}</p>
+                  <p className="text-neutral-800">{prj.description}</p>
                   {prj.techStack.length > 0 && (
-                    <p className="text-xs text-neutral-500">
+                    <p className="text-xs text-neutral-600">
                       {prj.techStack.join(" · ")}
                     </p>
                   )}
-                  <ul className="mt-0.5 list-disc space-y-0.5 pl-5">
+                  <ul className="mt-0.5 list-disc space-y-1 pl-5">
                     {prj.bullets.map((b, i) => (
                       <li key={i}>
                         <Editable
@@ -342,10 +342,10 @@ export function CvPreview({
         {/* Skills */}
         {profile.skillGroups.length > 0 && (
           <Section title="Skills">
-            <ul className="space-y-0.5">
+            <ul className="space-y-1">
               {profile.skillGroups.map((g) => (
                 <li key={g.id}>
-                  <span className="font-medium">{g.category}: </span>
+                  <span className="font-semibold">{g.category}: </span>
                   <Editable
                     value={g.skills.join(", ")}
                     onSave={(v) =>
@@ -381,9 +381,9 @@ export function CvPreview({
                   className="flex items-baseline justify-between gap-4"
                 >
                   <p>
-                    <Editable
-                      className="font-medium"
-                      value={ed.degree}
+                  <Editable
+                    className="font-semibold"
+                    value={ed.degree}
                       onSave={(v) =>
                         onEditProfile((p) => ({
                           ...p,
@@ -439,7 +439,7 @@ export function CvPreview({
                       </>
                     ) : null}
                   </p>
-                  <p className="shrink-0 text-xs text-neutral-500">
+                  <p className="shrink-0 text-xs text-neutral-600">
                     Class of{" "}
                     <Editable
                       value={ed.graduationYear}
@@ -464,11 +464,11 @@ export function CvPreview({
         {/* Certifications */}
         {profile.certifications && profile.certifications.length > 0 && (
           <Section title="Certifications">
-            <ul className="space-y-0.5">
+            <ul className="space-y-1">
               {profile.certifications.map((cert, i) => (
                 <li key={i}>
                   <Editable
-                    className="font-medium"
+                    className="font-semibold"
                     value={cert.name}
                     onSave={(v) =>
                       onEditProfile((p) => ({
@@ -530,8 +530,8 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="mt-5">
-      <h2 className="mb-1.5 border-b border-neutral-300 pb-0.5 text-[11px] font-semibold tracking-widest text-neutral-500 uppercase">
+    <section className="mt-6">
+      <h2 className="mb-2 border-b border-neutral-300 pb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-neutral-900">
         {title}
       </h2>
       {children}
