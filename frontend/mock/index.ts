@@ -2,7 +2,7 @@
 //   import { mockProfile, mockJobs } from "@/mock";
 // Simulated latency helper for fake "AI" calls during the mock phase.
 
-export { mockProfile } from "./profile";
+export { mockProfile, mockProfileFr } from "./profile";
 export { mockJobs } from "./jobs";
 export { mockAnalyze, mockRewrites } from "./generate";
 

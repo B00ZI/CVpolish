@@ -7,27 +7,39 @@ import { ArrowLeft, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import type { Job } from "@/lib/types";
+import type { Job, Language } from "@/lib/types";
 import { loadProfile } from "@/lib/profile-store";
 import { upsertJob } from "@/lib/jobs-store";
 import { mockAnalyze, withDelay } from "@/mock";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { cn } from "@/lib/utils";
+
+const LANGUAGES: {
+  value: Language;
+  label: string;
+  hint: string;
+}[] = [
+  { value: "en", label: "English", hint: "Uses your English profile" },
+  { value: "fr", label: "Français", hint: "Utilise ton profil français" },
+];
 
 export function NewJob() {
   const router = useRouter();
+  const [lang, setLang] = useState<Language | null>(null);
   const [title, setTitle] = useState("");
   const [company, setCompany] = useState("");
   const [location, setLocation] = useState("");
   const [description, setDescription] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const canAnalyze = title.trim().length > 0 && description.trim().length > 0;
+  const canAnalyze = lang !== null && title.trim().length > 0 && description.trim().length > 0;
 
   async function analyze() {
-    if (!canAnalyze || busy) return;
+    if (!canAnalyze || busy || lang === null) return;
     setBusy(true);
     const job: Job = {
       id: `job-${Date.now()}`,
+      language: lang,
       title: title.trim(),
       company: company.trim(),
       location: location.trim() || undefined,
@@ -38,7 +50,7 @@ export function NewJob() {
       rewrites: [],
       tailored: null,
     };
-    job.analysis = mockAnalyze(job, loadProfile());
+    job.analysis = mockAnalyze(job, loadProfile(lang));
     await withDelay(null, 1400);
     upsertJob(job);
     router.push(`/jobs/${job.id}`);
@@ -61,12 +73,48 @@ export function NewJob() {
       </header>
 
       <main className="mx-auto max-w-3xl px-6 pb-24 pt-10">
-        <h1 className="text-2xl font-medium tracking-tight">
-          New CV from a job
-        </h1>
-        <p className="mt-1.5 text-sm text-muted-foreground">
-          Paste the job description — it gets compared against your profile.
-        </p>
+        {lang === null ? (
+          <>
+            <h1 className="text-2xl font-medium tracking-tight">
+              First — which language is this CV for?
+            </h1>
+            <p className="mt-1.5 text-sm text-muted-foreground">
+              Each language uses its own profile database. You can maintain an
+              English and a French CV side by side.
+            </p>
+            <div className="mt-8 grid gap-4 sm:grid-cols-2">
+              {LANGUAGES.map((l) => (
+                <button
+                  key={l.value}
+                  onClick={() => setLang(l.value)}
+                  className="rounded-xl border border-border p-6 text-left transition-colors hover:border-foreground/25 hover:bg-muted/30"
+                >
+                  <p className="text-base font-medium">{l.label}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{l.hint}</p>
+                </button>
+              ))}
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="flex items-center justify-between gap-4">
+              <h1 className="text-2xl font-medium tracking-tight">
+                New CV from a job
+              </h1>
+              <button
+                onClick={() => setLang(null)}
+                className={cn(
+                  "rounded-full border border-border px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-foreground/25 hover:text-foreground",
+                )}
+              >
+                {lang === "fr" ? "Français" : "English"} · Change
+              </button>
+            </div>
+            <p className="mt-1.5 text-sm text-muted-foreground">
+              {lang === "fr"
+                ? "This CV is tailored from your French profile."
+                : "This CV is tailored from your English profile."}
+            </p>
 
         <div className="mt-8 space-y-5 rounded-xl border border-border p-6">
           <div className="grid gap-4 sm:grid-cols-2">
@@ -123,6 +171,8 @@ export function NewJob() {
             </Button>
           </div>
         </div>
+          </>
+        )}
       </main>
     </div>
   );

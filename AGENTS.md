@@ -94,6 +94,9 @@ Frontend note: Next.js 16 here differs from older versions — guides live in
 - [x] 2a. Types + realistic mock data (tech-CV structure) — DONE 2026-10-29
 - [x] 2b. Frontend screens with mock data — DONE 2026-10-31: `/` home ✅, `/profile` ✅, `/jobs/new` ✅, `/jobs/[id]` workspace ✅ (all 4 routes)
 - [x] 3. Frontend polish — DONE 2026-10-31: dark mode (toggle in all headers, no-flash script), edit-from-preview (click-to-edit, routes to profile vs rewrite), edge cases (no analysis / empty matched / empty missing), loading via button spinners. No `app/loading.tsx` (breaks `/jobs/[id]` — see gotchas)
+- [x] Print fixes — DONE 2026-11-01: `@page margin:0` (Chrome omits date/title/URL headers+footers), sheet carries own padding, screen spacing (`pb-24`, `min-h-screen`, `mt-6`) stripped in print, flex rows allowed to flow across pages
+- [x] CV typography pass — DONE 2026-11-01: body weight 450, semibold entry titles, secondary text neutral-600, unified section rhythm (`mt-6` sections, `space-y-1` bullets, `space-y-4` entries), centered header
+- [x] Bilingual EN/FR support — DONE 2026-11-01 (frontend-only, mock phase): `Language = "en" | "fr"`; two profile dbs in localStorage (`cvpolish.profile.v1` EN + `cvpolish.profile.fr.v1` FR); `/jobs/new` asks language FIRST (chooser cards) and jobs store `language`; `/profile` has EN/FR switcher (flushes edits before swapping db); A4 preview + section labels + "Present"/"Class of"/dates localize per job language; home cards show EN/FR badge; full French mock profile (`mockProfileFr`, same entry ids as EN) and MediLink mock job is French. `mockRewrites` emits FR glue text for FR jobs. Old saved jobs default to `en`.
 - [ ] 4. USER builds backend (learning Python): DB models, upload/parse endpoint, then AI layer
 - [ ] 5. Connect frontend to real API (replace mock data with fetch calls)
 - [ ] 6. Polish: loading states, error messages, dark mode

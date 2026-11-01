@@ -29,13 +29,16 @@ export function mockAnalyze(
 /** Fake rewrites: template-generated from the profile + job. */
 export function mockRewrites(job: Job, profile: MasterProfile): RewriteDiff[] {
   const diffs: RewriteDiff[] = [];
+  const fr = job.language === "fr";
 
   diffs.push({
     id: `rw-summary-${job.id}`,
     section: "summary",
     refId: "",
     original: profile.summary,
-    rewritten: `${profile.contact.targetTitle} focused on ${job.title} work — ${profile.summary}`,
+    rewritten: fr
+      ? `${profile.contact.targetTitle} — profil orienté ${job.title}. ${profile.summary}`
+      : `${profile.contact.targetTitle} focused on ${job.title} work — ${profile.summary}`,
     accepted: null,
   });
 
@@ -49,7 +52,11 @@ export function mockRewrites(job: Job, profile: MasterProfile): RewriteDiff[] {
         section: "experience",
         refId: exp.id,
         original: bullet,
-        rewritten: keywords ? `${bullet} — applied ${keywords}` : bullet,
+        rewritten: keywords
+          ? fr
+            ? `${bullet} — appuyé par : ${keywords}`
+            : `${bullet} — applied ${keywords}`
+          : bullet,
         accepted: null,
       });
     }
@@ -63,7 +70,9 @@ export function mockRewrites(job: Job, profile: MasterProfile): RewriteDiff[] {
       refId: project.id,
       original: project.bullets[0],
       rewritten: keywords
-        ? `${project.bullets[0]} — backed by ${keywords}`
+        ? fr
+          ? `${project.bullets[0]} — adossé à : ${keywords}`
+          : `${project.bullets[0]} — backed by ${keywords}`
         : project.bullets[0],
       accepted: null,
     });

@@ -27,7 +27,9 @@ export function loadJobs(): Job[] {
   if (typeof window === "undefined") return mockJobs;
   const saved = readSaved();
   const savedIds = new Set(saved.map((j) => j.id));
-  return [...saved, ...mockJobs.filter((m) => !savedIds.has(m.id))];
+  const all = [...saved, ...mockJobs.filter((m) => !savedIds.has(m.id))];
+  // Jobs saved before the language field existed default to English.
+  return all.map((j) => ({ ...j, language: j.language ?? "en" }));
 }
 
 export function getJob(id: string): Job | undefined {

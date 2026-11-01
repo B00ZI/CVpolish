@@ -155,3 +155,160 @@ export const mockProfile: MasterProfile = {
   ],
   updatedAt: "2026-10-29T10:00:00.000Z",
 };
+
+// Same profile, fully in French — a separate "database" so a CV can be
+// tailored in English or French. Same ids as the English mock, so
+// anything referencing an experience/project id works for both.
+export const mockProfileFr: MasterProfile = {
+  contact: {
+    fullName: "Karim Alaoui",
+    targetTitle: "Développeur Full-Stack",
+    phone: "+212 6 12 34 56 78",
+    email: "karim.alaoui.dev@proton.me",
+    city: "Casablanca, Maroc",
+    github: "github.com/karim-alaoui",
+    linkedin: "linkedin.com/in/karim-alaoui",
+    portfolio: "karimalaoui.dev",
+  },
+  summary:
+    "Développeur full-stack avec 3 ans d'expérience dans la création d'applications web avec React, TypeScript et Node.js. Je transforme des idées produits floues en fonctionnalités rapides et maintenables — j'ai récemment réduit les temps de réponse API de 40 % et divisé par deux les temps de déploiement grâce à un pipeline GitHub Actions. Je souhaite apporter un fort sens du produit et un code propre à une équipe produit remote-first.",
+  skillGroups: [
+    {
+      id: "sg-langs",
+      category: "Langages",
+      skills: ["TypeScript", "JavaScript", "Python", "SQL", "HTML5 / CSS3"],
+    },
+    {
+      id: "sg-frameworks",
+      category: "Frameworks & bibliothèques",
+      skills: ["React", "Next.js", "Node.js", "Express", "FastAPI", "Tailwind CSS"],
+    },
+    {
+      id: "sg-databases",
+      category: "Bases de données",
+      skills: ["PostgreSQL", "MongoDB", "Redis"],
+    },
+    {
+      id: "sg-cloud",
+      category: "Cloud & DevOps",
+      skills: ["Docker", "GitHub Actions", "CI/CD", "AWS (EC2, S3)", "Linux"],
+    },
+    {
+      id: "sg-tools",
+      category: "Outils",
+      skills: ["Git", "Postman", "Figma", "Jira"],
+    },
+  ],
+  experience: [
+    {
+      id: "exp-atlas",
+      jobTitle: "Développeur Full-Stack",
+      company: "Atlas Digital",
+      location: "Casablanca, Maroc",
+      startDate: "févr. 2023",
+      endDate: null,
+      bullets: [
+        "Optimisé les requêtes SQL et ajouté un cache Redis, réduisant le temps de réponse API moyen de 900 ms à 540 ms (−40 %)",
+        "Mis en place un pipeline CI/CD avec GitHub Actions et Docker, réduisant de moitié le temps de déploiement de 25 à 12 minutes",
+        "Livré un tableau de bord client utilisé par plus de 1 200 utilisateurs mensuels, améliorant le taux de complétion des tâches de 28 %",
+        "Piloté la migration d'une base de code jQuery de 40 000 lignes vers React + TypeScript sans interruption de service",
+      ],
+    },
+    {
+      id: "exp-greentech",
+      jobTitle: "Développeur Frontend (stagiaire)",
+      company: "GreenTech Solutions",
+      location: "Rabat, Maroc",
+      startDate: "juin 2022",
+      endDate: "sept. 2022",
+      bullets: [
+        "Reconstruit 12 pages jQuery historiques en React, améliorant le score Lighthouse de 54 à 91",
+        "Intégré le paiement Stripe, qui a traité les 500 premières commandes payées en 3 mois",
+      ],
+    },
+  ],
+  projects: [
+    {
+      id: "prj-shipment",
+      name: "ShipmentTrack",
+      description:
+        "Tableau de bord d'expéditions en temps réel pour petits transporteurs : carte en direct, alertes de retard et exports de rapports CSV/Excel.",
+      techStack: ["Next.js", "TypeScript", "PostgreSQL", "Socket.IO", "Docker"],
+      links: [
+        { label: "Démo", url: "https://shipmenttrack.app" },
+        { label: "GitHub", url: "github.com/karim-alaoui/shipmenttrack" },
+      ],
+      bullets: [
+        "Traite plus de 5 000 événements d'expédition par jour avec des mises à jour WebSocket en direct",
+        "Réduit le chargement initial de la page à 1,2 s grâce au découpage du code par route",
+      ],
+    },
+    {
+      id: "prj-devradar",
+      name: "DevRadar",
+      description:
+        "Synthèse hebdomadaire de l'état des dépôts envoyée par e-mail aux équipes : PR ouverts, latence de review, fréquence de commits.",
+      techStack: ["Python", "FastAPI", "PostgreSQL", "API GitHub"],
+      links: [{ label: "GitHub", url: "github.com/karim-alaoui/devradar" }],
+      bullets: [
+        "Exécute des tâches planifiées pour plus de 40 dépôts avec un taux de ponctualité de 99,5 %",
+      ],
+    },
+    {
+      id: "prj-souqlens",
+      name: "SouqLens",
+      description:
+        "Suivi de prix pour les sites e-commerce marocains : graphiques historiques et alertes via extension navigateur.",
+      techStack: ["React", "Node.js", "MongoDB", "Puppeteer"],
+      links: [
+        { label: "Démo", url: "https://souqlens.ma" },
+        { label: "GitHub", url: "github.com/karim-alaoui/souqlens" },
+      ],
+      bullets: [
+        "Suit plus de 300 produits sur 5 boutiques, en notifiant les utilisateurs par e-mail en cas de baisse de prix",
+      ],
+    },
+  ],
+  education: [
+    {
+      id: "edu-h2",
+      degree: "Licence d'informatique",
+      major: "Génie logiciel",
+      university: "Université Hassan II",
+      location: "Casablanca, Maroc",
+      graduationYear: "2023",
+      coursework: [
+        "Structures de données & algorithmes",
+        "Bases de données",
+        "Systèmes d'exploitation",
+        "Ingénierie web",
+      ],
+    },
+  ],
+  certifications: [
+    {
+      id: "cert-aws",
+      name: "AWS Certified Cloud Practitioner",
+      issuer: "Amazon Web Services",
+      year: "2024",
+    },
+  ],
+  keywords: [
+    "React",
+    "TypeScript",
+    "Next.js",
+    "Node.js",
+    "PostgreSQL",
+    "Docker",
+    "CI/CD",
+    "API REST",
+    "Tailwind CSS",
+    "FastAPI",
+    "Redis",
+    "Git",
+    "Optimisation des performances",
+    "Agile",
+  ],
+  updatedAt: "2026-10-29T10:00:00.000Z",
+};
+

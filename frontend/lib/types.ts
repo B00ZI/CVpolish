@@ -2,6 +2,9 @@
 // Shaped like the future FastAPI responses: when the backend exists,
 // endpoints return exactly these JSON shapes and the swap from mock -> API is easy.
 
+// The app keeps two profile databases (EN + FR); every CV targets one.
+export type Language = "en" | "fr";
+
 // ===== Master profile (the "CV database") =====
 
 export interface Contact {
@@ -99,6 +102,7 @@ export interface TailoredResult {
 
 export interface Job {
   id: string;
+  language: Language;          // which profile db the CV is built from
   title: string;               // job title
   company: string;
   location?: string;

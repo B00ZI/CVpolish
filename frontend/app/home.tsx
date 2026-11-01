@@ -174,15 +174,23 @@ export function Home() {
                   <span className="text-xs text-muted-foreground">
                     {formatDate(job.createdAt)}
                   </span>
-                  <Badge
-                    variant="secondary"
-                    className={cn(
-                      job.status === "tailed" &&
-                        "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-400",
-                    )}
-                  >
-                    {STATUS_LABEL[job.status]}
-                  </Badge>
+                  <div className="flex items-center gap-1.5">
+                    <Badge
+                      variant="outline"
+                      className="px-1.5 text-[11px] text-muted-foreground"
+                    >
+                      {job.language === "fr" ? "FR" : "EN"}
+                    </Badge>
+                    <Badge
+                      variant="secondary"
+                      className={cn(
+                        job.status === "tailed" &&
+                          "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-400",
+                      )}
+                    >
+                      {STATUS_LABEL[job.status]}
+                    </Badge>
+                  </div>
                 </div>
               </Link>
             ))}

@@ -43,8 +43,10 @@ export function Workspace({ jobId }: { jobId: string }) {
   const [analyzing, setAnalyzing] = useState(false);
 
   useEffect(() => {
-    setProfile(loadProfile());
-    setJob(getJob(jobId) ?? null);
+    const j = getJob(jobId);
+    setJob(j ?? null);
+    // Load the profile db for this job's language (EN or FR).
+    if (j) setProfile(loadProfile(j.language));
   }, [jobId]);
 
   function mutate(fn: (j: Job) => Job) {
@@ -337,7 +339,7 @@ export function Workspace({ jobId }: { jobId: string }) {
               onEditProfile={(fn) => {
                 const next = fn(profile);
                 setProfile(next);
-                saveProfile(next);
+                saveProfile(next, job.language);
               }}
               onEditRewrite={(rewriteId, text) =>
                 mutate((j) => ({

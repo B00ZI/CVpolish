@@ -6,11 +6,11 @@ import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import type { MasterProfile } from "@/lib/types";
+import type { Language, MasterProfile } from "@/lib/types";
 import { profileCompleteness } from "@/lib/completeness";
 import { clearProfile, loadProfile, saveProfile } from "@/lib/profile-store";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { mockProfile, withDelay } from "@/mock";
+import { mockProfile, mockProfileFr, withDelay } from "@/mock";
 import {
   CertificationsSection,
   ContactSection,
@@ -36,6 +36,7 @@ const SECTIONS = [
 export type Update = (fn: (p: MasterProfile) => MasterProfile) => void;
 
 export function ProfileEditor() {
+  const [lang, setLang] = useState<Language>("en");
   const [profile, setProfile] = useState<MasterProfile>(mockProfile);
   const [active, setActive] = useState<string>("contact");
   const [saveState, setSaveState] = useState<"saved" | "saving">("saved");
@@ -43,11 +44,12 @@ export function ProfileEditor() {
   const loaded = useRef(false);
   const firstSave = useRef(true);
 
-  // Load saved data after mount (avoids hydration mismatch).
+  // Load the profile for the selected language db after mount
+  // (avoids hydration mismatch) and on every language switch.
   useEffect(() => {
-    setProfile(loadProfile());
+    setProfile(loadProfile(lang));
     loaded.current = true;
-  }, []);
+  }, [lang]);
 
   // Autosave to localStorage (the fake backend for now).
   useEffect(() => {
@@ -58,11 +60,19 @@ export function ProfileEditor() {
     }
     setSaveState("saving");
     const t = setTimeout(() => {
-      saveProfile(profile);
+      saveProfile(profile, lang);
       setSaveState("saved");
     }, 500);
     return () => clearTimeout(t);
-  }, [profile]);
+  }, [profile, lang]);
+
+  /** Swap database: flush pending edits to the current db, then load the other. */
+  function switchLang(next: Language) {
+    if (next === lang) return;
+    saveProfile(profile, lang);
+    setLang(next);
+    setProfile(loadProfile(next));
+  }
 
   // Scroll-spy for the side nav.
   useEffect(() => {
@@ -100,11 +110,11 @@ export function ProfileEditor() {
 
   function reset() {
     try {
-      clearProfile();
+      clearProfile(lang);
     } catch {
       // ignore
     }
-    setProfile(mockProfile);
+    setProfile(lang === "fr" ? mockProfileFr : mockProfile);
     toast("Reset", { description: "Back to the mock data." });
   }
 
@@ -124,6 +134,23 @@ export function ProfileEditor() {
             <span className="text-sm font-medium">Profile</span>
           </div>
           <div className="flex items-center gap-3">
+            {/* Language db switcher: EN and FR are separate profiles */}
+            <div className="flex overflow-hidden rounded-lg border border-border">
+              {(["en", "fr"] as Language[]).map((l) => (
+                <button
+                  key={l}
+                  onClick={() => switchLang(l)}
+                  className={cn(
+                    "px-2.5 py-1 text-xs transition-colors",
+                    lang === l
+                      ? "bg-muted font-medium text-foreground"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {l === "en" ? "EN" : "FR"}
+                </button>
+              ))}
+            </div>
             <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <span
                 className={cn(
@@ -198,11 +225,11 @@ export function ProfileEditor() {
         <main className="min-w-0 flex-1 md:max-w-2xl">
           <header className="mb-2">
             <h1 className="text-2xl font-medium tracking-tight">
-              Your CV database
+              Your CV database — {lang === "fr" ? "Français" : "English"}
             </h1>
             <p className="mt-1.5 text-sm text-muted-foreground">
-              Everything here feeds every tailored CV. Fill it once, reuse it
-              forever.
+              Everything here feeds every tailored CV in this language. Toggle
+              EN / FR up top to edit the other database.
             </p>
           </header>
 

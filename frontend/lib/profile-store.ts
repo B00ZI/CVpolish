@@ -1,36 +1,45 @@
 // LocalStorage = the fake backend during the mock phase.
 // Same shape the real API will use, so the swap later is trivial.
 
-import type { MasterProfile } from "./types";
-import { mockProfile } from "@/mock";
+import type { Language, MasterProfile } from "./types";
+import { mockProfile, mockProfileFr } from "@/mock";
 
-export const PROFILE_KEY = "cvpolish.profile.v1";
+export const PROFILE_KEY = "cvpolish.profile.v1"; // English db
+export const PROFILE_KEY_FR = "cvpolish.profile.fr.v1"; // French db
 
-export function loadProfile(): MasterProfile {
-  if (typeof window === "undefined") return mockProfile;
+function keyFor(lang: Language): string {
+  return lang === "fr" ? PROFILE_KEY_FR : PROFILE_KEY;
+}
+
+function mockFor(lang: Language): MasterProfile {
+  return lang === "fr" ? mockProfileFr : mockProfile;
+}
+
+export function loadProfile(lang: Language = "en"): MasterProfile {
+  if (typeof window === "undefined") return mockFor(lang);
   try {
-    const raw = localStorage.getItem(PROFILE_KEY);
+    const raw = localStorage.getItem(keyFor(lang));
     if (raw) {
       // Merge over mock so new fields added later still get defaults.
-      return { ...mockProfile, ...(JSON.parse(raw) as MasterProfile) };
+      return { ...mockFor(lang), ...(JSON.parse(raw) as MasterProfile) };
     }
   } catch {
     // corrupted storage -> fall through to mock
   }
-  return mockProfile;
+  return mockFor(lang);
 }
 
-export function saveProfile(profile: MasterProfile): void {
+export function saveProfile(profile: MasterProfile, lang: Language = "en"): void {
   try {
-    localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+    localStorage.setItem(keyFor(lang), JSON.stringify(profile));
   } catch {
     // storage blocked/full -> ignore, app still works in-session
   }
 }
 
-export function clearProfile(): void {
+export function clearProfile(lang: Language = "en"): void {
   try {
-    localStorage.removeItem(PROFILE_KEY);
+    localStorage.removeItem(keyFor(lang));
   } catch {
     // ignore
   }

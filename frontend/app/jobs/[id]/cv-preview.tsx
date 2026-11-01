@@ -4,10 +4,47 @@ import { useRef, useState } from "react";
 import { Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { Job, MasterProfile } from "@/lib/types";
+import type { Job, Language, MasterProfile } from "@/lib/types";
 
-function fmtRange(start: string, end?: string | null): string {
-  return `${start} — ${end ?? "Present"}`;
+// CV template labels per language. The CV content itself comes from the
+// profile db in that language; these are just the fixed template strings.
+const LABELS: Record<
+  Language,
+  {
+    summary: string;
+    experience: string;
+    projects: string;
+    skills: string;
+    education: string;
+    certifications: string;
+    present: string;
+    graduated: string;
+  }
+> = {
+  en: {
+    summary: "Summary",
+    experience: "Experience",
+    projects: "Projects",
+    skills: "Skills",
+    education: "Education",
+    certifications: "Certifications",
+    present: "Present",
+    graduated: "Class of",
+  },
+  fr: {
+    summary: "Profil",
+    experience: "Expérience professionnelle",
+    projects: "Projets",
+    skills: "Compétences",
+    education: "Formation",
+    certifications: "Certifications",
+    present: "Présent",
+    graduated: "Diplômé en",
+  },
+};
+
+function fmtRange(start: string, end: string | null, present: string): string {
+  return `${start} — ${end ?? present}`;
 }
 
 /** Click-to-edit text: renders as plain text until clicked, then a small
@@ -156,6 +193,7 @@ export function CvPreview({
   onEditRewrite: (rewriteId: string, text: string) => void;
 }) {
   const { summary, experience, projects } = tailor(profile, job);
+  const L = LABELS[job.language];
   const c = profile.contact;
   const contactLine = [c.phone, c.email, c.city]
     .filter(Boolean)
@@ -216,7 +254,7 @@ export function CvPreview({
 
         {/* Summary */}
         {summary.text && (
-          <Section title="Summary">
+          <Section title={L.summary}>
             <p>
               <Editable
                 block
@@ -233,7 +271,7 @@ export function CvPreview({
 
         {/* Experience */}
         {experience.length > 0 && (
-          <Section title="Experience">
+          <Section title={L.experience}>
             <ul className="space-y-4">
               {experience.map((exp) => (
                 <li key={exp.id}>
@@ -247,7 +285,7 @@ export function CvPreview({
                       </span>
                     </p>
                     <p className="shrink-0 text-xs text-neutral-600">
-                      {fmtRange(exp.startDate, exp.endDate)}
+                      {fmtRange(exp.startDate, exp.endDate, L.present)}
                     </p>
                   </div>
                   <ul className="mt-1.5 list-disc space-y-1 pl-5">
@@ -285,7 +323,7 @@ export function CvPreview({
 
         {/* Projects */}
         {projects.length > 0 && (
-          <Section title="Projects">
+          <Section title={L.projects}>
             <ul className="space-y-4">
               {projects.map((prj) => (
                 <li key={prj.id}>
@@ -341,7 +379,7 @@ export function CvPreview({
 
         {/* Skills */}
         {profile.skillGroups.length > 0 && (
-          <Section title="Skills">
+          <Section title={L.skills}>
             <ul className="space-y-1">
               {profile.skillGroups.map((g) => (
                 <li key={g.id}>
@@ -373,7 +411,7 @@ export function CvPreview({
 
         {/* Education */}
         {profile.education.length > 0 && (
-          <Section title="Education">
+          <Section title={L.education}>
             <ul className="space-y-1">
               {profile.education.map((ed) => (
                 <li
@@ -440,7 +478,7 @@ export function CvPreview({
                     ) : null}
                   </p>
                   <p className="shrink-0 text-xs text-neutral-600">
-                    Class of{" "}
+                    {L.graduated}{" "}
                     <Editable
                       value={ed.graduationYear}
                       onSave={(v) =>
@@ -463,7 +501,7 @@ export function CvPreview({
 
         {/* Certifications */}
         {profile.certifications && profile.certifications.length > 0 && (
-          <Section title="Certifications">
+          <Section title={L.certifications}>
             <ul className="space-y-1">
               {profile.certifications.map((cert, i) => (
                 <li key={i}>

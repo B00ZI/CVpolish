@@ -20,20 +20,21 @@ What we expect:
 - Experience with Agile teams and code review culture
 - Good communication in English`;
 
-const medilinkJd = `Full-Stack Developer — Hybrid, Casablanca
+const medilinkJd = `Développeur Full-Stack — Hybride, Casablanca
 
-MediLink builds appointment platforms for clinics across Morocco. You'll work across our Next.js frontend and FastAPI backend.
+MediLink développe des plateformes de prise de rendez-vous pour des cliniques partout au Maroc. Vous travaillerez sur notre frontend Next.js et notre backend FastAPI.
 
-Requirements:
-- 2+ years with React / Next.js and Node.js or Python
-- PostgreSQL schema design and query optimization
-- Docker-based deployments and CI/CD
-- REST API design, authentication (OAuth2 / JWT)
-- Experience in healthcare or regulated domains is a plus`;
+Exigences :
+- 2+ ans d'expérience avec React / Next.js et Node.js ou Python
+- Conception de schémas PostgreSQL et optimisation de requêtes
+- Déploiements basés sur Docker et CI/CD
+- Conception d'API REST, authentification (OAuth2 / JWT)
+- Une expérience dans la santé ou un domaine régulé est un plus`;
 
 export const mockJobs: Job[] = [
   {
     id: "job-northbound",
+    language: "en",
     title: "Frontend Developer",
     company: "Northbound Labs",
     location: "Remote",
@@ -120,9 +121,10 @@ export const mockJobs: Job[] = [
   },
   {
     id: "job-medilink",
-    title: "Full-Stack Developer",
+    language: "fr",
+    title: "Développeur Full-Stack",
     company: "MediLink",
-    location: "Casablanca, Morocco (hybrid)",
+    location: "Casablanca, Maroc (hybride)",
     description: medilinkJd,
     createdAt: "2026-10-24T14:00:00.000Z",
     status: "tailed",
@@ -137,45 +139,45 @@ export const mockJobs: Job[] = [
         "PostgreSQL",
         "Docker",
         "CI/CD",
-        "REST APIs",
+        "API REST",
         "TypeScript",
-        "Performance optimization",
+        "Optimisation des performances",
       ],
-      missing: ["OAuth2 / JWT", "Healthcare domain"],
+      missing: ["OAuth2 / JWT", "Domaine de la santé"],
       notes: {
         "OAuth2 / JWT":
-          "Implemented JWT auth in DevRadar with refresh-token rotation",
+          "Implémenté l'authentification JWT dans DevRadar avec rotation des refresh tokens",
       },
       added: [],
     },
     rewrites: [],
     tailored: {
       summary:
-        "Full-stack developer with 3 years shipping Next.js frontends and FastAPI backends, experienced with PostgreSQL optimization, Docker, and JWT-secured REST APIs. At Atlas Digital I cut API response times by 40% and halved deploy times with CI/CD. I bring that same care for reliability and speed to platforms where correctness matters — like clinic appointment flows.",
+        "Développeur full-stack avec 3 ans d'expérience sur des frontends Next.js et des backends FastAPI, à l'aise avec l'optimisation PostgreSQL, Docker et les API REST sécurisées par JWT. Chez Atlas Digital, j'ai réduit les temps de réponse API de 40 % et divisé par deux les temps de déploiement avec le CI/CD. J'apporte ce même souci de fiabilité et de rapidité aux plateformes où l'exactitude compte — comme les parcours de prise de rendez-vous en clinique.",
       experience: [
         {
           id: "exp-atlas",
-          jobTitle: "Full-Stack Developer",
+          jobTitle: "Développeur Full-Stack",
           company: "Atlas Digital",
-          location: "Casablanca, Morocco",
-          startDate: "Feb 2023",
+          location: "Casablanca, Maroc",
+          startDate: "févr. 2023",
           endDate: null,
           bullets: [
-            "Built and maintained Next.js product surfaces and FastAPI endpoints serving 1,200+ monthly users",
-            "Optimized PostgreSQL queries and added Redis caching, cutting API response time by 40% (900 ms → 540 ms)",
-            "Containerized services with Docker and automated releases through GitHub Actions CI/CD, halving deploy time",
+            "Construit et maintenu des surfaces produit Next.js et des endpoints FastAPI pour plus de 1 200 utilisateurs mensuels",
+            "Optimisé les requêtes PostgreSQL et ajouté un cache Redis, réduisant le temps de réponse API de 40 % (900 ms → 540 ms)",
+            "Conteneurisé les services avec Docker et automatisé les releases via CI/CD GitHub Actions, divisant le temps de déploiement par deux",
           ],
         },
         {
           id: "exp-greentech",
-          jobTitle: "Frontend Developer Intern",
+          jobTitle: "Développeur Frontend (stagiaire)",
           company: "GreenTech Solutions",
-          location: "Rabat, Morocco",
-          startDate: "Jun 2022",
-          endDate: "Sep 2022",
+          location: "Rabat, Maroc",
+          startDate: "juin 2022",
+          endDate: "sept. 2022",
           bullets: [
-            "Rebuilt 12 legacy pages in React, improving Lighthouse performance from 54 to 91",
-            "Integrated Stripe checkout that processed the first 500 paid orders within 3 months",
+            "Reconstruit 12 pages historiques en React, améliorant le score Lighthouse de 54 à 91",
+            "Intégré le paiement Stripe, qui a traité les 500 premières commandes payées en 3 mois",
           ],
         },
       ],
@@ -184,14 +186,14 @@ export const mockJobs: Job[] = [
           id: "prj-devradar",
           name: "DevRadar",
           description:
-            "Weekly repo-health digest emailed to engineering teams: open PRs, review latency, commit churn.",
-          techStack: ["Python", "FastAPI", "PostgreSQL", "GitHub API"],
+            "Synthèse hebdomadaire de l'état des dépôts envoyée par e-mail aux équipes : PR ouverts, latence de review, fréquence de commits.",
+          techStack: ["Python", "FastAPI", "PostgreSQL", "API GitHub"],
           links: [
             { label: "GitHub", url: "github.com/karim-alaoui/devradar" },
           ],
           bullets: [
-            "Runs scheduled jobs for 40+ repositories with a 99.5% on-time delivery rate",
-            "JWT-secured API with refresh-token rotation for team dashboards",
+            "Exécute des tâches planifiées pour plus de 40 dépôts avec un taux de ponctualité de 99,5 %",
+            "API sécurisée par JWT avec rotation des refresh tokens pour les tableaux de bord d'équipe",
           ],
         },
       ],
