@@ -269,6 +269,38 @@ export function CvPreview({
           </Section>
         )}
 
+        {/* Skills — right after Summary so keywords land early */}
+        {profile.skillGroups.length > 0 && (
+          <Section title={L.skills}>
+            <ul className="space-y-1">
+              {profile.skillGroups.map((g) => (
+                <li key={g.id}>
+                  <span className="font-semibold">{g.category}: </span>
+                  <Editable
+                    value={g.skills.join(", ")}
+                    onSave={(v) =>
+                      onEditProfile((p) => ({
+                        ...p,
+                        skillGroups: p.skillGroups.map((sg) =>
+                          sg.id === g.id
+                            ? {
+                                ...sg,
+                                skills: v
+                                  .split(",")
+                                  .map((s) => s.trim())
+                                  .filter(Boolean),
+                              }
+                            : sg,
+                        ),
+                      }))
+                    }
+                  />
+                </li>
+              ))}
+            </ul>
+          </Section>
+        )}
+
         {/* Experience */}
         {experience.length > 0 && (
           <Section title={L.experience}>
@@ -338,13 +370,12 @@ export function CvPreview({
                       </span>
                     ))}
                   </p>
-                  <p className="text-neutral-800">{prj.description}</p>
                   {prj.techStack.length > 0 && (
-                    <p className="text-xs text-neutral-600">
-                      {prj.techStack.join(" · ")}
+                    <p className="text-neutral-700">
+                      {prj.techStack.join(", ")}
                     </p>
                   )}
-                  <ul className="mt-0.5 list-disc space-y-1 pl-5">
+                  <ul className="mt-1 list-disc space-y-1 pl-5">
                     {prj.bullets.map((b, i) => (
                       <li key={i}>
                         <Editable
@@ -371,38 +402,6 @@ export function CvPreview({
                       </li>
                     ))}
                   </ul>
-                </li>
-              ))}
-            </ul>
-          </Section>
-        )}
-
-        {/* Skills */}
-        {profile.skillGroups.length > 0 && (
-          <Section title={L.skills}>
-            <ul className="space-y-1">
-              {profile.skillGroups.map((g) => (
-                <li key={g.id}>
-                  <span className="font-semibold">{g.category}: </span>
-                  <Editable
-                    value={g.skills.join(", ")}
-                    onSave={(v) =>
-                      onEditProfile((p) => ({
-                        ...p,
-                        skillGroups: p.skillGroups.map((sg) =>
-                          sg.id === g.id
-                            ? {
-                                ...sg,
-                                skills: v
-                                  .split(",")
-                                  .map((s) => s.trim())
-                                  .filter(Boolean),
-                              }
-                            : sg,
-                        ),
-                      }))
-                    }
-                  />
                 </li>
               ))}
             </ul>

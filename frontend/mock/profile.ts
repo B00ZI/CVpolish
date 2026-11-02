@@ -83,8 +83,10 @@ export const mockProfile: MasterProfile = {
         { label: "GitHub", url: "github.com/karim-alaoui/shipmenttrack" },
       ],
       bullets: [
-        "Processes 5,000+ shipment events/day with WebSocket live updates",
-        "Cut initial page load to 1.2 s with route-level code splitting",
+        "Real-time shipment dashboard for small carriers: live map, delay alerts, and CSV/Excel report exports in a single tool",
+        "Streams 5,000+ shipment events per day over WebSockets with live map updates",
+        "Cut initial page load to 1.2 s with route-level code splitting and image optimization",
+        "Designed an indexed PostgreSQL schema that keeps lookup queries under 50 ms at 10x production load",
       ],
     },
     {
@@ -95,7 +97,9 @@ export const mockProfile: MasterProfile = {
       techStack: ["Python", "FastAPI", "PostgreSQL", "GitHub API"],
       links: [{ label: "GitHub", url: "github.com/karim-alaoui/devradar" }],
       bullets: [
-        "Runs scheduled jobs for 40+ repositories with a 99.5% on-time delivery rate",
+        "Weekly repo-health digest for engineering teams: open PRs, review latency, and commit trends in one email",
+        "Runs scheduled GitHub API jobs for 40+ repositories with a 99.5% on-time delivery rate",
+        "JWT auth with refresh-token rotation protects private team dashboards",
       ],
     },
     {
@@ -109,7 +113,9 @@ export const mockProfile: MasterProfile = {
         { label: "GitHub", url: "github.com/karim-alaoui/souqlens" },
       ],
       bullets: [
-        "Tracks 300+ products across 5 stores, notifying users on price drops via email",
+        "Price tracker for Moroccan e-commerce: historical price charts and instant price-drop alerts",
+        "Tracks 300+ products across 5 stores with Puppeteer scraping and email notifications",
+        "Browser extension shows price history directly on product pages",
       ],
     },
   ],
@@ -239,8 +245,10 @@ export const mockProfileFr: MasterProfile = {
         { label: "GitHub", url: "github.com/karim-alaoui/shipmenttrack" },
       ],
       bullets: [
-        "Traite plus de 5 000 événements d'expédition par jour avec des mises à jour WebSocket en direct",
-        "Réduit le chargement initial de la page à 1,2 s grâce au découpage du code par route",
+        "Tableau de bord d'expéditions en temps réel pour petits transporteurs : carte en direct, alertes de retard et exports de rapports dans un seul outil",
+        "Traite plus de 5 000 événements d'expédition par jour via WebSocket avec carte mise à jour en direct",
+        "Ramène le chargement initial de la page à 1,2 s grâce au découpage du code par route et à l'optimisation des images",
+        "Conçu un schéma PostgreSQL indexé qui garde les requêtes sous 50 ms avec 10x la charge de production",
       ],
     },
     {
@@ -251,7 +259,9 @@ export const mockProfileFr: MasterProfile = {
       techStack: ["Python", "FastAPI", "PostgreSQL", "API GitHub"],
       links: [{ label: "GitHub", url: "github.com/karim-alaoui/devradar" }],
       bullets: [
-        "Exécute des tâches planifiées pour plus de 40 dépôts avec un taux de ponctualité de 99,5 %",
+        "Synthèse hebdomadaire de l'état des dépôts pour les équipes : PR ouverts, latence de review et tendances de commits en un seul e-mail",
+        "Exécute des tâches planifiées via l'API GitHub pour plus de 40 dépôts avec un taux de ponctualité de 99,5 %",
+        "Auth JWT avec rotation des refresh tokens pour protéger les tableaux de bord d'équipe",
       ],
     },
     {
@@ -265,7 +275,9 @@ export const mockProfileFr: MasterProfile = {
         { label: "GitHub", url: "github.com/karim-alaoui/souqlens" },
       ],
       bullets: [
-        "Suit plus de 300 produits sur 5 boutiques, en notifiant les utilisateurs par e-mail en cas de baisse de prix",
+        "Suivi de prix pour l'e-commerce marocain : historique visuel des prix et alertes instantanées de baisse",
+        "Suit plus de 300 produits sur 5 boutiques avec scraping Puppeteer et notifications par e-mail",
+        "L'extension navigateur affiche l'historique des prix directement sur les pages produit",
       ],
     },
   ],
