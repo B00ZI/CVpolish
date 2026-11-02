@@ -272,7 +272,7 @@ export function CvPreview({
         {/* Skills — right after Summary so keywords land early */}
         {profile.skillGroups.length > 0 && (
           <Section title={L.skills}>
-            <ul className="space-y-1">
+            <ul className="space-y-0.5">
               {profile.skillGroups.map((g) => (
                 <li key={g.id}>
                   <span className="font-semibold">{g.category}: </span>
@@ -320,7 +320,7 @@ export function CvPreview({
                       {fmtRange(exp.startDate, exp.endDate, L.present)}
                     </p>
                   </div>
-                  <ul className="mt-1.5 list-disc space-y-1 pl-5">
+                  <ul className="mt-1 list-disc space-y-0.5 pl-5 leading-snug">
                     {exp.bullets.map((b, i) => (
                       <li key={i}>
                         <Editable
@@ -359,7 +359,7 @@ export function CvPreview({
             <ul className="space-y-4">
               {projects.map((prj) => (
                 <li key={prj.id}>
-                  <p className="font-semibold">
+                  <p className="font-semibold leading-snug">
                     {prj.name}
                     {prj.links.map((l) => (
                       <span
@@ -371,11 +371,11 @@ export function CvPreview({
                     ))}
                   </p>
                   {prj.techStack.length > 0 && (
-                    <p className="text-neutral-700">
+                    <p className="leading-snug text-neutral-700">
                       {prj.techStack.join(", ")}
                     </p>
                   )}
-                  <ul className="mt-1 list-disc space-y-1 pl-5">
+                  <ul className="mt-1 list-disc space-y-0.5 pl-5 leading-snug">
                     {prj.bullets.map((b, i) => (
                       <li key={i}>
                         <Editable
@@ -501,7 +501,7 @@ export function CvPreview({
         {/* Certifications */}
         {profile.certifications && profile.certifications.length > 0 && (
           <Section title={L.certifications}>
-            <ul className="space-y-1">
+            <ul className="space-y-0.5">
               {profile.certifications.map((cert, i) => (
                 <li key={i}>
                   <Editable
