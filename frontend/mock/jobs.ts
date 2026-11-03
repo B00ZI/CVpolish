@@ -167,6 +167,14 @@ export const mockJobs: Job[] = [
             "Optimisé les requêtes PostgreSQL et ajouté un cache Redis, réduisant le temps de réponse API de 40 % (900 ms → 540 ms)",
             "Conteneurisé les services avec Docker et automatisé les releases via CI/CD GitHub Actions, divisant le temps de déploiement par deux",
           ],
+          technologies: [
+            "Next.js",
+            "FastAPI",
+            "PostgreSQL",
+            "Redis",
+            "Docker",
+            "GitHub Actions",
+          ],
         },
         {
           id: "exp-greentech",
@@ -179,6 +187,7 @@ export const mockJobs: Job[] = [
             "Reconstruit 12 pages historiques en React, améliorant le score Lighthouse de 54 à 91",
             "Intégré le paiement Stripe, qui a traité les 500 premières commandes payées en 3 mois",
           ],
+          technologies: ["React", "TypeScript", "Stripe"],
         },
       ],
       projects: [

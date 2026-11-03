@@ -57,6 +57,15 @@ export const mockProfile: MasterProfile = {
         "Shipped a customer dashboard used by 1,200+ monthly users, raising task completion rate by 28%",
         "Led the migration of a 40k-line jQuery codebase to React + TypeScript with zero downtime",
       ],
+      technologies: [
+        "React",
+        "TypeScript",
+        "Node.js",
+        "PostgreSQL",
+        "Redis",
+        "Docker",
+        "GitHub Actions",
+      ],
     },
     {
       id: "exp-greentech",
@@ -69,6 +78,7 @@ export const mockProfile: MasterProfile = {
         "Rebuilt 12 legacy jQuery pages in React, improving Lighthouse performance from 54 to 91",
         "Integrated Stripe checkout that processed the first 500 paid orders within 3 months",
       ],
+      technologies: ["React", "TypeScript", "Stripe"],
     },
   ],
   projects: [
@@ -219,6 +229,15 @@ export const mockProfileFr: MasterProfile = {
         "Livré un tableau de bord client utilisé par plus de 1 200 utilisateurs mensuels, améliorant le taux de complétion des tâches de 28 %",
         "Piloté la migration d'une base de code jQuery de 40 000 lignes vers React + TypeScript sans interruption de service",
       ],
+      technologies: [
+        "React",
+        "TypeScript",
+        "Node.js",
+        "PostgreSQL",
+        "Redis",
+        "Docker",
+        "GitHub Actions",
+      ],
     },
     {
       id: "exp-greentech",
@@ -231,6 +250,7 @@ export const mockProfileFr: MasterProfile = {
         "Reconstruit 12 pages jQuery historiques en React, améliorant le score Lighthouse de 54 à 91",
         "Intégré le paiement Stripe, qui a traité les 500 premières commandes payées en 3 mois",
       ],
+      technologies: ["React", "TypeScript", "Stripe"],
     },
   ],
   projects: [

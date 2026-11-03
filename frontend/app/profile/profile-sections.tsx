@@ -434,6 +434,28 @@ export function ExperienceSection({
               </Field>
             </div>
           </div>
+          <Field label="Technologies used — the AI uses these to polish your bullets">
+            <Input
+              placeholder="React, Node.js, PostgreSQL (comma separated)"
+              value={exp.technologies.join(", ")}
+              onChange={(e) =>
+                update((p) => ({
+                  ...p,
+                  experience: p.experience.map((x, j) =>
+                    j === i
+                      ? {
+                          ...x,
+                          technologies: e.target.value
+                            .split(",")
+                            .map((t) => t.trim())
+                            .filter(Boolean),
+                        }
+                      : x,
+                  ),
+                }))
+              }
+            />
+          </Field>
           <Field label="Impact bullets — one per line">
             <Textarea
               rows={4}
@@ -449,6 +471,12 @@ export function ExperienceSection({
               }
             />
           </Field>
+          <p className="text-xs text-muted-foreground">
+            Tip: include the app description, key implementations, tools used,
+            and measurable results. The more raw detail you provide here, the
+            better the AI can polish your bullets for targeted job
+            descriptions.
+          </p>
         </CardBox>
       ))}
       <AddBtn
@@ -465,6 +493,7 @@ export function ExperienceSection({
                 startDate: "",
                 endDate: null,
                 bullets: [""],
+                technologies: [],
               },
             ],
           }))
@@ -584,6 +613,7 @@ export function ProjectsSection({
             <Textarea
               rows={3}
               value={prj.bullets.join("\n")}
+              placeholder="1st: what the app is/does · then: what you implemented + key decisions with numbers"
               onChange={(e) =>
                 update((p) => ({
                   ...p,
@@ -594,6 +624,12 @@ export function ProjectsSection({
               }
             />
           </Field>
+          <p className="text-xs text-muted-foreground">
+            Tip: include the app description, key implementations, tools used,
+            and measurable results. The more raw detail you provide here, the
+            better the AI can polish your bullets for targeted job
+            descriptions.
+          </p>
         </CardBox>
       ))}
       <AddBtn

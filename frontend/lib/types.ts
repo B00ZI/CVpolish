@@ -26,6 +26,7 @@ export interface Experience {
   startDate: string;          // "Feb 2023"
   endDate: string | null;     // null = Present
   bullets: string[];          // quantified impact bullets, never task lists
+  technologies: string[];     // what was used there — helps AI polish bullets
 }
 
 export interface Project {
