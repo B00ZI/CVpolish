@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Loader2, Plus, Sparkles, Trash2, X } from "lucide-react";
+import { Loader2, Plus, Sparkles, Trash2, TriangleAlert, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,11 +13,14 @@ function Section({
   id,
   title,
   hint,
+  action,
   children,
 }: {
   id: string;
   title: string;
   hint?: string;
+  /** Optional top-right control (e.g. a Save button that must not be missed). */
+  action?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -25,12 +28,19 @@ function Section({
       id={id}
       className="scroll-mt-28 border-t border-border py-10 first:border-t-0 first:pt-6"
     >
-      <div className="flex items-baseline justify-between gap-4">
-        <h2 className="text-lg font-medium tracking-tight">{title}</h2>
-        {hint ? (
-          <span className="text-xs text-muted-foreground">{hint}</span>
-        ) : null}
-      </div>
+      {action ? (
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <h2 className="text-lg font-medium tracking-tight">{title}</h2>
+          {action}
+        </div>
+      ) : (
+        <div className="flex items-baseline justify-between gap-4">
+          <h2 className="text-lg font-medium tracking-tight">{title}</h2>
+          {hint ? (
+            <span className="text-xs text-muted-foreground">{hint}</span>
+          ) : null}
+        </div>
+      )}
       <div className="mt-5 space-y-4">{children}</div>
     </section>
   );
@@ -877,11 +887,14 @@ export function AiIntelligenceSection({
   profile,
   update,
   busy,
+  stale,
   onExtract,
 }: {
   profile: MasterProfile;
   update: Update;
   busy: boolean;
+  /** True when the profile data changed since the last extraction. */
+  stale: boolean;
   onExtract: () => void;
 }) {
   const ai = profile.aiIntelligence;
@@ -900,7 +913,36 @@ export function AiIntelligenceSection({
     <Section
       id="ai-intelligence"
       title="AI intelligence"
-      hint="What the AI is allowed to use"
+      action={
+        <div className="flex items-center gap-2">
+          {stale && !busy ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+              <TriangleAlert className="h-3 w-3" />
+              Outdated
+            </span>
+          ) : null}
+          <Button
+            type="button"
+            variant={stale ? "outline" : "default"}
+            disabled={busy}
+            onClick={onExtract}
+            className={cn(
+              "h-9 gap-2 px-4 text-sm font-medium",
+              stale &&
+                "border-amber-300 bg-amber-100 text-amber-900 hover:bg-amber-200 dark:border-amber-800 dark:bg-amber-900/40 dark:text-amber-200 dark:hover:bg-amber-900/60",
+            )}
+          >
+            {busy ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : stale ? (
+              <TriangleAlert className="h-4 w-4" />
+            ) : (
+              <Sparkles className="h-4 w-4 text-blue-600" />
+            )}
+            {busy ? "Extracting…" : stale ? "Save & re-extract" : "Save & extract"}
+          </Button>
+        </div>
+      }
     >
       <p className="text-sm text-muted-foreground">
         This data is sent to the AI together with your summary, skills,
@@ -909,15 +951,6 @@ export function AiIntelligenceSection({
         certifications are <strong>never</strong> sent — they are used
         exactly as you put them in your profile.
       </p>
-
-      <Button type="button" variant="outline" size="sm" disabled={busy} onClick={onExtract} className="gap-1.5 self-start">
-        {busy ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        ) : (
-          <Sparkles className="h-3.5 w-3.5 text-blue-600" />
-        )}
-        {busy ? "Extracting…" : "Save & extract"}
-      </Button>
 
       {/* Baseline summary the AI keeps between extractions */}
       <div className="rounded-xl border border-border bg-muted/30 p-4">
@@ -970,11 +1003,13 @@ export function AiIntelligenceSection({
       </div>
 
       <p className="text-xs text-muted-foreground">
-        {mounted && extractedAt
-          ? `Last extracted ${extractedAt}. You can always edit the keywords by hand.`
-          : ai.lastExtractedAt
-            ? "Last extracted — you can always edit the keywords by hand."
-            : "Never extracted yet — the backend will run this for real."}
+        {stale
+          ? "Your profile data changed since the last save — details above are newer than this AI view. Hit Save & re-extract to refresh."
+          : mounted && extractedAt
+            ? `Last extracted ${extractedAt}. You can always edit the keywords by hand.`
+            : ai.lastExtractedAt
+              ? "Last extracted — you can always edit the keywords by hand."
+              : "Never extracted yet — the backend will run this for real."}
       </p>
     </Section>
   );
