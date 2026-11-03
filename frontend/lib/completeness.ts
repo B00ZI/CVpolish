@@ -16,7 +16,7 @@ export function profileCompleteness(profile: MasterProfile): number {
     profile.experience.length > 0,
     profile.projects.length > 0,
     profile.education.length > 0,
-    profile.keywords.length > 0,
+    profile.aiIntelligence.masterKeywords.length > 0,
   ];
   return Math.round((checks.filter(Boolean).length / checks.length) * 100);
 }

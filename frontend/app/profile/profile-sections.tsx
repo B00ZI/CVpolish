@@ -871,53 +871,104 @@ export function CertificationsSection({
   );
 }
 
-// ===== 8. Keywords =====
+// ===== 8. AI intelligence (replaces plain keywords) =====
 
-export function KeywordsSection({
+export function AiIntelligenceSection({
   profile,
   update,
   busy,
-  onAi,
+  onExtract,
 }: {
   profile: MasterProfile;
   update: Update;
   busy: boolean;
-  onAi: () => void;
+  onExtract: () => void;
 }) {
+  const ai = profile.aiIntelligence;
+  const extractedAt = ai.lastExtractedAt
+    ? new Date(ai.lastExtractedAt).toLocaleString(undefined, {
+        dateStyle: "medium",
+        timeStyle: "short",
+      })
+    : null;
+
   return (
     <Section
-      id="keywords"
-      title="Master keywords"
-      hint="Job matching compares against this list"
+      id="ai-intelligence"
+      title="AI intelligence"
+      hint="What the AI is allowed to use"
     >
-      <div className="flex flex-wrap gap-2">
-        {profile.keywords.map((kw) => (
-          <Chip
-            key={kw}
-            label={kw}
-            onRemove={() =>
+      <p className="text-sm text-muted-foreground">
+        This data is sent to the AI together with your summary, skills,
+        experience, projects, and technologies whenever we compare your
+        profile with a job description. Contact, education, and
+        certifications are <strong>never</strong> sent — they are used
+        exactly as you put them in your profile.
+      </p>
+
+      <Button type="button" variant="outline" size="sm" disabled={busy} onClick={onExtract} className="gap-1.5 self-start">
+        {busy ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : (
+          <Sparkles className="h-3.5 w-3.5 text-blue-600" />
+        )}
+        {busy ? "Extracting…" : "Save & extract"}
+      </Button>
+
+      {/* Baseline summary the AI keeps between extractions */}
+      <div className="rounded-xl border border-border bg-muted/30 p-4">
+        <span className="text-sm font-medium">Baseline summary</span>
+        <p className="mt-1.5 text-sm text-muted-foreground">
+          {ai.baselineSummary || "Not extracted yet — hit Save & extract."}
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <span className="text-sm text-muted-foreground">Master keywords</span>
+        <div className="flex flex-wrap gap-2">
+          {ai.masterKeywords.map((kw) => (
+            <Chip
+              key={kw}
+              label={kw}
+              onRemove={() =>
+                update((p) => ({
+                  ...p,
+                  aiIntelligence: {
+                    ...p.aiIntelligence,
+                    masterKeywords: p.aiIntelligence.masterKeywords.filter(
+                      (k) => k !== kw,
+                    ),
+                  },
+                }))
+              }
+            />
+          ))}
+          {ai.masterKeywords.length === 0 ? (
+            <span className="text-xs text-muted-foreground">
+              No keywords yet — extract or add manually below.
+            </span>
+          ) : null}
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <AddInput
+            placeholder="Add keyword + Enter"
+            onAdd={(v) =>
               update((p) => ({
                 ...p,
-                keywords: p.keywords.filter((k) => k !== kw),
+                aiIntelligence: {
+                  ...p.aiIntelligence,
+                  masterKeywords: [...p.aiIntelligence.masterKeywords, v],
+                },
               }))
             }
           />
-        ))}
+        </div>
       </div>
-      <div className="flex flex-wrap items-center gap-3">
-        <AddInput
-          placeholder="Add keyword + Enter"
-          onAdd={(v) =>
-            update((p) => ({ ...p, keywords: [...p.keywords, v] }))
-          }
-        />
-        <AiButton busy={busy} onClick={onAi}>
-          Extract keywords
-        </AiButton>
-      </div>
-      <p className={cn("text-xs text-muted-foreground")}>
-        AI reads your data above and keeps this list sharp — you can always
-        edit it by hand.
+
+      <p className="text-xs text-muted-foreground">
+        {extractedAt
+          ? `Last extracted ${extractedAt}. You can always edit the keywords by hand.`
+          : "Never extracted yet — the backend will run this for real."}
       </p>
     </Section>
   );

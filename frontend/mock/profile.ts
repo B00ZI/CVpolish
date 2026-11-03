@@ -153,24 +153,31 @@ export const mockProfile: MasterProfile = {
       year: "2024",
     },
   ],
-  keywords: [
-    "React",
-    "TypeScript",
-    "Next.js",
-    "Node.js",
-    "PostgreSQL",
-    "Docker",
-    "CI/CD",
-    "REST APIs",
-    "Tailwind CSS",
-    "FastAPI",
-    "Redis",
-    "Git",
-    "Performance optimization",
-    "Agile",
-  ],
+  aiIntelligence: {
+    masterKeywords: [
+      "React",
+      "TypeScript",
+      "Next.js",
+      "Node.js",
+      "PostgreSQL",
+      "Docker",
+      "CI/CD",
+      "REST APIs",
+      "Tailwind CSS",
+      "FastAPI",
+      "Redis",
+      "Git",
+      "Performance optimization",
+      "Agile",
+    ],
+    baselineSummary:
+      "Full-Stack Developer with 3 years of experience across React, TypeScript, Node.js, and PostgreSQL — ships fast, maintainable features end to end, recently cutting API response times by 40% and halving deploy times.",
+    lastExtractedAt: "2026-10-29T10:00:00.000Z",
+  },
   updatedAt: "2026-10-29T10:00:00.000Z",
 };
+
+// Same profile, fully in French — a separate "database" so a CV can be
 
 // Same profile, fully in French — a separate "database" so a CV can be
 // tailored in English or French. Same ids as the English mock, so
@@ -325,22 +332,27 @@ export const mockProfileFr: MasterProfile = {
       year: "2024",
     },
   ],
-  keywords: [
-    "React",
-    "TypeScript",
-    "Next.js",
-    "Node.js",
-    "PostgreSQL",
-    "Docker",
-    "CI/CD",
-    "API REST",
-    "Tailwind CSS",
-    "FastAPI",
-    "Redis",
-    "Git",
-    "Optimisation des performances",
-    "Agile",
-  ],
+  aiIntelligence: {
+    masterKeywords: [
+      "React",
+      "TypeScript",
+      "Next.js",
+      "Node.js",
+      "PostgreSQL",
+      "Docker",
+      "CI/CD",
+      "API REST",
+      "Tailwind CSS",
+      "FastAPI",
+      "Redis",
+      "Git",
+      "Optimisation des performances",
+      "Agile",
+    ],
+    baselineSummary:
+      "Développeur full-stack avec 3 ans d'expérience sur React, TypeScript, Node.js et PostgreSQL — livre des fonctionnalités rapides et maintenables, a récemment réduit les temps de réponse API de 40 % et divisé les temps de déploiement par deux.",
+    lastExtractedAt: "2026-10-29T10:00:00.000Z",
+  },
   updatedAt: "2026-10-29T10:00:00.000Z",
 };
 

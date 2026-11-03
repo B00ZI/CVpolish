@@ -1,15 +1,22 @@
-import type { GapAnalysis, Job, MasterProfile, RewriteDiff } from "@/lib/types";
+import type {
+  AiIntelligence,
+  GapAnalysis,
+  Job,
+  MasterProfile,
+  RewriteDiff,
+} from "@/lib/types";
 
 // FAKE "AI" for the mock phase — instant, local, obviously template-driven.
 // Real generation arrives with the backend (step 4).
 
-/** Fake gap analysis: matches profile keywords found in the JD text. */
+/** Fake gap analysis: matches master keywords found in the JD text. */
 export function mockAnalyze(
   job: Pick<Job, "title" | "description">,
   profile: MasterProfile,
 ): GapAnalysis {
   const text = job.description.toLowerCase();
-  const matched = profile.keywords.filter((k) =>
+  const kws = profile.aiIntelligence.masterKeywords;
+  const matched = kws.filter((k) =>
     text.includes(k.toLowerCase()),
   );
   const commonGaps = ["GraphQL", "Jest", "Playwright", "Storybook", "Kubernetes"];
@@ -23,6 +30,26 @@ export function mockAnalyze(
     missing,
     notes: {},
     added: [],
+  };
+}
+
+/** Extract what the AI keeps from the profile: keywords + a baseline summary. */
+export function mockExtractIntelligence(p: MasterProfile): AiIntelligence {
+  const techs = new Set<string>();
+  for (const g of p.skillGroups) g.skills.forEach((s) => techs.add(s));
+  for (const e of p.experience) e.technologies.forEach((t) => techs.add(t));
+  for (const prj of p.projects) prj.techStack.forEach((t) => techs.add(t));
+  const list = [...techs].slice(0, 15);
+  const last = p.experience[0];
+  const projNames = p.projects.slice(0, 2).map((x) => x.name).filter(Boolean);
+  const baseline =
+    `${p.contact.targetTitle} with hands-on experience in ${list.slice(0, 6).join(", ")}` +
+    (last ? ` — most recent: ${last.jobTitle}${last.company ? ` at ${last.company}` : ""}` : "") +
+    (projNames.length ? `; shipped projects including ${projNames.join(" and ")}.` : ".");
+  return {
+    masterKeywords: list,
+    baselineSummary: baseline,
+    lastExtractedAt: new Date().toISOString(),
   };
 }
 

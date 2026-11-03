@@ -10,13 +10,13 @@ import type { Language, MasterProfile } from "@/lib/types";
 import { profileCompleteness } from "@/lib/completeness";
 import { clearProfile, loadProfile, saveProfile } from "@/lib/profile-store";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { mockProfile, mockProfileFr, withDelay } from "@/mock";
+import { mockProfile, mockProfileFr, mockExtractIntelligence, withDelay } from "@/mock";
 import {
   CertificationsSection,
   ContactSection,
   EducationSection,
   ExperienceSection,
-  KeywordsSection,
+  AiIntelligenceSection,
   ProjectsSection,
   SkillsSection,
   SummarySection,
@@ -30,7 +30,7 @@ const SECTIONS = [
   { id: "projects", label: "Projects" },
   { id: "education", label: "Education" },
   { id: "certifications", label: "Certifications" },
-  { id: "keywords", label: "Keywords" },
+  { id: "ai-intelligence", label: "AI intelligence" },
 ] as const;
 
 export type Update = (fn: (p: MasterProfile) => MasterProfile) => void;
@@ -245,11 +245,20 @@ export function ProfileEditor() {
           <ProjectsSection profile={profile} update={update} />
           <EducationSection profile={profile} update={update} />
           <CertificationsSection profile={profile} update={update} />
-          <KeywordsSection
+          <AiIntelligenceSection
             profile={profile}
             update={update}
-            busy={aiBusy === "keywords"}
-            onAi={() => runAi("keywords")}
+            busy={aiBusy === "intelligence"}
+            onExtract={async () => {
+              setAiBusy("intelligence");
+              await withDelay(null, 1400);
+              const intel = mockExtractIntelligence(profile);
+              update((p) => ({ ...p, aiIntelligence: intel }));
+              setAiBusy(null);
+              toast("AI intelligence saved", {
+                description: `${intel.masterKeywords.length} keywords extracted from your data (mock).`,
+              });
+            }}
           />
 
           <footer className="border-t border-border pt-6 text-xs text-muted-foreground">

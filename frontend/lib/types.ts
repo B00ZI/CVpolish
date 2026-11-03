@@ -61,6 +61,14 @@ export interface SkillGroup {
   skills: string[];
 }
 
+// AI keeps a distilled view of the profile: the keyword dictionary and a
+// baseline summary it can start rewrites from. Computed on explicit save.
+export interface AiIntelligence {
+  masterKeywords: string[];   // extracted from skills, technologies, tech stacks
+  baselineSummary: string;    // neutral base line the AI rewrites per job
+  lastExtractedAt: string | null; // ISO date of last extraction
+}
+
 export interface MasterProfile {
   contact: Contact;
   summary: string;            // 2-3 sentences, ~100 words, AI or manual
@@ -69,7 +77,7 @@ export interface MasterProfile {
   projects: Project[];
   education: Education[];
   certifications: Certification[];   // optional section, [] if none
-  keywords: string[];         // AI-extracted master keyword list
+  aiIntelligence: AiIntelligence;     // what the AI is allowed to use
   updatedAt: string;          // ISO date
 }
 
