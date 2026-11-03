@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -107,15 +107,6 @@ export function ProfileEditor() {
   }
 
   const completeness = profileCompleteness(profile);
-
-  // "Outdated" = the profile's current data yields keywords that the stored
-  // AI view doesn't have (skills / technologies / tech stacks changed).
-  const extractedStale = useMemo(() => {
-    const ai = profile.aiIntelligence;
-    if (!ai.lastExtractedAt) return true;
-    const derived = mockExtractIntelligence(profile).masterKeywords;
-    return derived.some((k) => !ai.masterKeywords.includes(k));
-  }, [profile]);
 
   function reset() {
     try {
@@ -258,7 +249,6 @@ export function ProfileEditor() {
             profile={profile}
             update={update}
             busy={aiBusy === "intelligence"}
-            stale={extractedStale}
             onExtract={async () => {
               setAiBusy("intelligence");
               await withDelay(null, 1400);

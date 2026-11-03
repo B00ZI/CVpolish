@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Loader2, Plus, Sparkles, Trash2, TriangleAlert, X } from "lucide-react";
+import { Loader2, Plus, Sparkles, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -887,14 +887,11 @@ export function AiIntelligenceSection({
   profile,
   update,
   busy,
-  stale,
   onExtract,
 }: {
   profile: MasterProfile;
   update: Update;
   busy: boolean;
-  /** True when the profile data changed since the last extraction. */
-  stale: boolean;
   onExtract: () => void;
 }) {
   const ai = profile.aiIntelligence;
@@ -914,34 +911,20 @@ export function AiIntelligenceSection({
       id="ai-intelligence"
       title="AI intelligence"
       action={
-        <div className="flex items-center gap-2">
-          {stale && !busy ? (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-300">
-              <TriangleAlert className="h-3 w-3" />
-              Outdated
-            </span>
-          ) : null}
-          <Button
-            type="button"
-            variant={stale ? "outline" : "default"}
-            disabled={busy}
-            onClick={onExtract}
-            className={cn(
-              "h-9 gap-2 px-4 text-sm font-medium",
-              stale &&
-                "border-amber-300 bg-amber-100 text-amber-900 hover:bg-amber-200 dark:border-amber-800 dark:bg-amber-900/40 dark:text-amber-200 dark:hover:bg-amber-900/60",
-            )}
-          >
-            {busy ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : stale ? (
-              <TriangleAlert className="h-4 w-4" />
-            ) : (
-              <Sparkles className="h-4 w-4 text-blue-600" />
-            )}
-            {busy ? "Extracting…" : stale ? "Save & re-extract" : "Save & extract"}
-          </Button>
-        </div>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={busy}
+          onClick={onExtract}
+          className="h-9 gap-2 px-4 text-sm font-medium"
+        >
+          {busy ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Sparkles className="h-4 w-4 text-blue-600" />
+          )}
+          {busy ? "Extracting…" : "Save & extract"}
+        </Button>
       }
     >
       <p className="text-sm text-muted-foreground">
@@ -1003,13 +986,10 @@ export function AiIntelligenceSection({
       </div>
 
       <p className="text-xs text-muted-foreground">
-        {stale
-          ? "Your profile data changed since the last save — details above are newer than this AI view. Hit Save & re-extract to refresh."
-          : mounted && extractedAt
-            ? `Last extracted ${extractedAt}. You can always edit the keywords by hand.`
-            : ai.lastExtractedAt
-              ? "Last extracted — you can always edit the keywords by hand."
-              : "Never extracted yet — the backend will run this for real."}
+        {mounted && extractedAt ? `Last extracted ${extractedAt}. ` : ""}
+        No need to re-extract after every small edit — run it when you make
+        big changes to your data. This block always travel with the rest of
+        your profile data.
       </p>
     </Section>
   );
