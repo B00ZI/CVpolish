@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Loader2, Plus, Sparkles, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -885,6 +885,10 @@ export function AiIntelligenceSection({
   onExtract: () => void;
 }) {
   const ai = profile.aiIntelligence;
+  // Date formatting is locale-dependent -> only render after mount
+  // (server and browser may disagree, which breaks hydration).
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const extractedAt = ai.lastExtractedAt
     ? new Date(ai.lastExtractedAt).toLocaleString(undefined, {
         dateStyle: "medium",
@@ -966,9 +970,11 @@ export function AiIntelligenceSection({
       </div>
 
       <p className="text-xs text-muted-foreground">
-        {extractedAt
+        {mounted && extractedAt
           ? `Last extracted ${extractedAt}. You can always edit the keywords by hand.`
-          : "Never extracted yet — the backend will run this for real."}
+          : ai.lastExtractedAt
+            ? "Last extracted — you can always edit the keywords by hand."
+            : "Never extracted yet — the backend will run this for real."}
       </p>
     </Section>
   );
