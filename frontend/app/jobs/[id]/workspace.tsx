@@ -29,9 +29,11 @@ function cvText(p: MasterProfile): string {
 
 interface AnalysisBlockProps {
   analysis: GapAnalysis;
-  /** Missing keywords that now appear in the CV (live client scan, 0 API). */
+  /** Required keywords present on the CV right now (live scan, 0 API). */
   matchedLive: string[];
-  /** Missing keywords still absent from the CV. */
+  /** Keywords accepted via "add anyway" — counted, no CV proof. */
+  claimed: string[];
+  /** Required keywords absent from the CV. */
   missingLive: string[];
   /** Live match score (recomputed from the scan). */
   score: number;
@@ -93,20 +95,26 @@ export function Workspace({ jobId }: { jobId: string }) {
     saveProfile(next, job.language);
   }
 
-  // ===== Live scan: missing keywords found in the CV flip to matched =====
-  const [matchedLive, missingLive, score] = useMemo<[string[], string[], number]>(() => {
-    if (!job?.analysis) return [[], [], 0];
+  // ===== Live scan: every keyword (matched + missing) re-checked against
+  // the CV on each edit — both directions stay truthful. "Added anyway"
+  // keywords stay covered but show as claimed (no proof on the CV). =====
+  const [matchedLive, claimed, missingLive, score] = useMemo<
+    [string[], string[], string[], number]
+  >(() => {
+    if (!job?.analysis) return [[], [], [], 0];
     const a = job.analysis;
     const text = cvText(profile);
-    const present = (kw: string) =>
-      text.includes(kw.toLowerCase()) || a.added.includes(kw);
-    const doLive = a.missing.filter((kw) => present(kw));
-    const stillMissing = a.missing.filter((kw) => !present(kw));
-    const total = a.matched.length + a.missing.length || 1;
+    const onCv = (kw: string) => text.includes(kw.toLowerCase());
+    const required = [...new Set([...a.matched, ...a.missing])];
+    const inCv = required.filter(onCv);
+    const claimedNow = a.added.filter((kw) => !onCv(kw));
+    const gone = required.filter((kw) => !onCv(kw) && !a.added.includes(kw));
+    const total = required.length || 1;
     return [
-      doLive,
-      stillMissing,
-      Math.round(((a.matched.length + doLive.length) / total) * 100),
+      inCv,
+      claimedNow,
+      gone,
+      Math.round(((inCv.length + claimedNow.length) / total) * 100),
     ];
   }, [profile, job]);
 
@@ -303,6 +311,7 @@ export function Workspace({ jobId }: { jobId: string }) {
               <AnalysisBlock
                 analysis={job.analysis}
                 matchedLive={matchedLive}
+                claimed={claimed}
                 missingLive={missingLive}
                 score={score}
                 targets={targets}
@@ -383,6 +392,7 @@ export function Workspace({ jobId }: { jobId: string }) {
 function AnalysisBlock({
   analysis,
   matchedLive,
+  claimed,
   missingLive,
   score,
   targets,
@@ -412,7 +422,7 @@ function AnalysisBlock({
             />
           </div>
           <p className="mt-2 text-sm text-muted-foreground">
-            {analysis.matched.length + matchedLive.length} matched ·{" "}
+            {matchedLive.length + claimed.length} covered ·{" "}
             {missingLive.length} missing keywords
           </p>
         </div>
@@ -421,18 +431,18 @@ function AnalysisBlock({
       {/* Matched */}
       <section>
         <h2 className="text-base font-medium">You already have</h2>
-        {analysis.matched.length + matchedLive.length === 0 ? (
+        {matchedLive.length + claimed.length === 0 ? (
           <p className="mt-1.5 text-sm text-muted-foreground">
             None of your keywords appear in this description — paste the full
             requirements section?
           </p>
         ) : (
           <div className="mt-3 flex flex-wrap gap-2">
-            {analysis.matched.map((kw) => (
-              <MatchedChip key={kw} keyword={kw} onHighlight={onHighlight} />
-            ))}
             {matchedLive.map((kw) => (
               <MatchedChip key={kw} keyword={kw} onHighlight={onHighlight} />
+            ))}
+            {claimed.map((kw) => (
+              <ClaimedChip key={kw} keyword={kw} />
             ))}
           </div>
         )}
@@ -507,6 +517,19 @@ function MatchedChip({
       <Check className="h-3 w-3" />
       {keyword}
     </button>
+  );
+}
+
+/** Claimed chip — accepted via "add anyway", zero CV proof yet. */
+function ClaimedChip({ keyword }: { keyword: string }) {
+  return (
+    <span
+      title="Counted via 'add anyway' — no matching text on the CV"
+      className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-amber-300 py-1 pl-2.5 pr-3 text-sm text-amber-700 dark:border-amber-700 dark:text-amber-400"
+    >
+      <Check className="h-3 w-3" />
+      {keyword}
+    </span>
   );
 }
 
