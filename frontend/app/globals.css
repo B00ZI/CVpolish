@@ -179,11 +179,11 @@
   }
 }
 
-/* Slim dark scrollbar on the workspace panes, no arrows */
+/* Slim dark scrollbar on the workspace panes, no arrows.
+   -webkit-* only: scrollbar-width/scrollbar-color switch Chrome to the
+   standard engine, which re-enables the native arrow buttons */
 .cv-scroll {
-  scrollbar-width: thin;
-  scrollbar-color: rgb(163 163 163) transparent;
-  scrollbar-gutter: stable;
+  scrollbar-gutter: auto;
 }
 .cv-scroll::-webkit-scrollbar {
   width: 5px;
