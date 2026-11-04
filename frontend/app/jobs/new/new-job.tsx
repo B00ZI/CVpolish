@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import type { Job, Language } from "@/lib/types";
 import { loadProfile } from "@/lib/profile-store";
@@ -26,23 +25,26 @@ const LANGUAGES: {
 export function NewJob() {
   const router = useRouter();
   const [lang, setLang] = useState<Language | null>(null);
-  const [title, setTitle] = useState("");
-  const [company, setCompany] = useState("");
-  const [location, setLocation] = useState("");
   const [description, setDescription] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const canAnalyze = lang !== null && title.trim().length > 0 && description.trim().length > 0;
+  const canAnalyze = lang !== null && description.trim().length > 0;
 
   async function analyze() {
     if (!canAnalyze || busy || lang === null) return;
     setBusy(true);
+    // Title = the first meaningful line of the JD (strip markdown headings).
+    const firstLine =
+      description
+        .trim()
+        .split("\n")
+        .find((l) => l.trim()) ?? "";
+    const title = firstLine.replace(/^#+\s*/, "").slice(0, 80);
     const job: Job = {
       id: `job-${Date.now()}`,
       language: lang,
-      title: title.trim(),
-      company: company.trim(),
-      location: location.trim() || undefined,
+      title,
+      company: "",
       description,
       createdAt: new Date().toISOString(),
       status: "analyzed",
@@ -117,45 +119,21 @@ export function NewJob() {
             </p>
 
         <div className="mt-8 space-y-5 rounded-xl border border-border p-6">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="block space-y-1.5">
-              <span className="text-sm text-muted-foreground">
-                Job title *
-              </span>
-              <Input
-                value={title}
-                placeholder="Frontend Developer"
-                onChange={(e) => setTitle(e.target.value)}
-              />
-            </label>
-            <label className="block space-y-1.5">
-              <span className="text-sm text-muted-foreground">Company</span>
-              <Input
-                value={company}
-                placeholder="Northbound Labs"
-                onChange={(e) => setCompany(e.target.value)}
-              />
-            </label>
-          </div>
-          <label className="block space-y-1.5">
-            <span className="text-sm text-muted-foreground">Location</span>
-            <Input
-              value={location}
-              placeholder="Remote · Casablanca · Hybrid…"
-              onChange={(e) => setLocation(e.target.value)}
-            />
-          </label>
           <label className="block space-y-1.5">
             <span className="text-sm text-muted-foreground">
               Job description *
             </span>
             <Textarea
-              rows={12}
+              rows={16}
               value={description}
-              placeholder="Paste the full job posting here: responsibilities, requirements, tech stack…"
+              placeholder={`Paste the full job posting here — title, company, responsibilities, requirements, tech stack.\n\nExample:\nFrontend Developer (React / Next.js) — Remote\n\nAt Northbound Labs we build analytics tools for logistics teams. You'll own major product surfaces in React and TypeScript, style with Tailwind CSS, integrate REST/GraphQL APIs, and ship continuously through CI/CD on AWS.`}
               onChange={(e) => setDescription(e.target.value)}
             />
           </label>
+          <p className="text-xs text-muted-foreground">
+            Title and company are read from the first line — one paste is
+            enough.
+          </p>
 
           <div className="flex items-center justify-between gap-4 border-t border-border pt-5">
             <p className="text-xs text-muted-foreground">
