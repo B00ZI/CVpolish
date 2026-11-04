@@ -1,8 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Plus, Printer } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Job, Language, MasterProfile } from "@/lib/types";
 
@@ -20,8 +19,6 @@ const LABELS: Record<
     present: string;
     graduated: string;
     addBullet: string;
-    addRole: string;
-    addProject: string;
     ph: { jobTitle: string; company: string; location: string; dates: string; bullet: string };
   }
 > = {
@@ -35,8 +32,6 @@ const LABELS: Record<
     present: "Present",
     graduated: "Class of",
     addBullet: "Add bullet",
-    addRole: "Add role",
-    addProject: "Add project",
     ph: {
       jobTitle: "Job title",
       company: "Company",
@@ -55,8 +50,6 @@ const LABELS: Record<
     present: "Présent",
     graduated: "Diplômé en",
     addBullet: "Ajouter une ligne",
-    addRole: "Ajouter un poste",
-    addProject: "Ajouter un projet",
     ph: {
       jobTitle: "Intitulé du poste",
       company: "Entreprise",
@@ -180,9 +173,9 @@ function Editable({
   );
 }
 
-/** Inline "add" affordance (same editing UX as Editable): a muted row
- *  that opens an empty textarea. Enter or blur saves, empty text is
- *  discarded, Escape cancels. Screen-only (never printed). */
+/** Inline "add" affordance (same editing UX as Editable): hidden until
+ *  its section is hovered or flashed amber; then opens an empty textarea.
+ *  Enter or blur saves, empty text is discarded, Escape cancels. */
 function AddRow({
   label,
   onAdd,
@@ -211,7 +204,7 @@ function AddRow({
           skipBlur.current = false;
           setAdding(true);
         }}
-        className="mt-0.5 inline-flex cursor-text items-center gap-1 text-[12px] text-neutral-400 transition-colors hover:text-neutral-700 print:hidden dark:text-neutral-500 dark:hover:text-neutral-300"
+        className="cv-add-row mt-0.5 inline-flex cursor-text items-center gap-1 text-[12px] text-neutral-400 transition-colors hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-300"
       >
         <Plus className="h-3 w-3" />
         {label}
@@ -246,12 +239,10 @@ function AddRow({
 export function CvPreview({
   profile,
   job,
-  onPrint,
   onEditProfile,
 }: {
   profile: MasterProfile;
   job: Job;
-  onPrint: () => void;
   /** Persist an edit to the master profile. */
   onEditProfile: (fn: (p: MasterProfile) => MasterProfile) => void;
 }) {
@@ -266,18 +257,7 @@ export function CvPreview({
 
   return (
     <div>
-      {/* Toolbar — hidden on paper */}
-      <div className="mb-4 flex items-center justify-between gap-4 print:hidden">
-        <p className="text-sm text-muted-foreground">
-          Click any text to edit your profile. Then print or save as PDF.
-        </p>
-        <Button onClick={onPrint}>
-          <Printer className="h-4 w-4" />
-          Print / Save as PDF
-        </Button>
-      </div>
-
-      {/* A4 sheet */}
+      {/* A4 sheet — hint + print button live in the left panel */}
       <article
         id="cv-preview"
         className="mx-auto rounded-lg border border-border bg-white p-10 text-[13px] leading-relaxed font-[450] text-neutral-900 shadow-sm print:rounded-none print:border-0 print:p-[8mm_10mm] print:shadow-none"
@@ -421,29 +401,6 @@ export function CvPreview({
                   </ul>
                 </li>
               ))}
-              <li className="list-none">
-                <AddRow
-                  label={L.addRole}
-                  onAdd={(v) =>
-                    onEditProfile((p) => ({
-                      ...p,
-                      experience: [
-                        ...p.experience,
-                        {
-                          id: `exp-${Date.now()}`,
-                          jobTitle: v,
-                          company: "",
-                          location: "",
-                          startDate: "",
-                          endDate: null,
-                          bullets: [""],
-                          technologies: [],
-                        },
-                      ],
-                    }))
-                  }
-                />
-              </li>
             </ul>
           </Section>
         )}
@@ -513,27 +470,6 @@ export function CvPreview({
                   </ul>
                 </li>
               ))}
-              <li className="list-none">
-                <AddRow
-                  label={L.addProject}
-                  onAdd={(v) =>
-                    onEditProfile((p) => ({
-                      ...p,
-                      projects: [
-                        ...p.projects,
-                        {
-                          id: `prj-${Date.now()}`,
-                          name: v,
-                          description: "",
-                          techStack: [],
-                          links: [],
-                          bullets: [""],
-                        },
-                      ],
-                    }))
-                  }
-                />
-              </li>
             </ul>
           </Section>
         )}

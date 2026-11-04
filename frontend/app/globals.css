@@ -162,6 +162,22 @@
   border-radius: 4px;
 }
 
+/* Inline "+ add" rows in the CV preview: hidden until their section is
+   hovered or flashed amber from the missing-keyword panel */
+.cv-add-row {
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+:is(li, section)[data-cv-target]:hover .cv-add-row,
+:is(li, section)[data-cv-target].kw-hit-soft .cv-add-row {
+  opacity: 1;
+}
+@media print {
+  .cv-add-row {
+    display: none !important;
+  }
+}
+
 @media print {
   html,
   body {

@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Check, Loader2, Sparkles } from "lucide-react";
+import { ArrowLeft, Check, Loader2, Printer, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { ThemeToggle } from "@/components/theme-toggle";
 import type { GapAnalysis, Job, MasterProfile } from "@/lib/types";
@@ -41,7 +42,7 @@ interface AnalysisBlockProps {
   onNavigate: (targetId: string) => void;
   onHighlight: (keyword: string) => void;
   autofitting: boolean;
-  onAutoFit: () => void;
+  onAutoFit: (prompt: string) => void;
 }
 
 export function Workspace({ jobId }: { jobId: string }) {
@@ -159,7 +160,8 @@ export function Workspace({ jobId }: { jobId: string }) {
     setAnalyzing(false);
   }
 
-  /** Navigation: scroll the CV column to a section and open its editor. */
+  /** Navigation: amber-highlight a section in the CV and scroll to it.
+   *  Does not open any editor — the user picks edit or add. */
   function navigate(targetId: string) {
     const el = document.querySelector<HTMLElement>(
       `[data-cv-target="${targetId}"]`,
@@ -168,7 +170,6 @@ export function Workspace({ jobId }: { jobId: string }) {
     clearHits();
     el.classList.add("kw-hit-soft");
     el.scrollIntoView({ behavior: "smooth", block: "center" });
-    openSoon(el);
     hitTimer.current = window.setTimeout(clearHits, 3000);
   }
 
@@ -232,13 +233,6 @@ export function Workspace({ jobId }: { jobId: string }) {
     hitTimer.current = window.setTimeout(clearHits, 3000);
   }
 
-  function openSoon(el: HTMLElement) {
-    // two frames so the scroll settles before the editor opens
-    window.setTimeout(() => {
-      el.querySelector<HTMLElement>('[role="button"]')?.click();
-    }, 300);
-  }
-
   /** Quick add: append a missing keyword to a skill category (0 tokens). */
   function quickAdd(kw: string, categoryId: string) {
     updateProfile((p) => ({
@@ -251,15 +245,17 @@ export function Workspace({ jobId }: { jobId: string }) {
     }));
   }
 
-  /** Bulk AI auto-fit: mock for POST /api/cv/integrate-missing. */
-  async function autoFit() {
+  /** Bulk AI fit: the user prompts how the missing keywords should be
+   *  woven in; mock for POST /api/cv/integrate-missing (Gemini). */
+  async function autoFit(prompt: string) {
     if (autofitting || missingLive.length === 0) return;
     setAutofitting(true);
     const kws = missingLive;
     await withDelay(null, 1800);
+    void prompt; // real backend sends this as part of the request body
     updateProfile((p) => mockAutoFit(p, kws, job!.language));
     setAutofitting(false);
-    toast("AI auto-fit done", {
+    toast("AI fit done", {
       description: `${kws.length} keyword${kws.length > 1 ? "s" : ""} woven into your bullets (mock POST /api/cv/integrate-missing).`,
     });
   }
@@ -294,72 +290,64 @@ export function Workspace({ jobId }: { jobId: string }) {
       {/* Single view: match & gaps on the left, live CV on the right */}
       <main className="mx-auto max-w-[1500px] px-6 pb-24 pt-8 print:p-0">
         <div className="grid gap-10 lg:grid-cols-[minmax(360px,440px)_1fr] print:block">
-          {/* ===== Left: match & gaps ===== */}
-          <aside className="space-y-8 self-start print:hidden lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
-            {job.analysis ? (
-              <AnalysisBlock
-                analysis={job.analysis}
-                matchedLive={matchedLive}
-                missingLive={missingLive}
-                score={score}
-                targets={targets}
-                categories={categories}
-                onQuickAdd={quickAdd}
-                onNavigate={navigate}
-                onHighlight={highlight}
-                autofitting={autofitting}
-                onAutoFit={autoFit}
-              />
-            ) : (
-              <div className="rounded-xl border border-dashed border-border p-12 text-center">
-                <h2 className="text-base font-medium">No analysis yet</h2>
-                <p className="mx-auto mt-1.5 max-w-md text-sm text-muted-foreground">
-                  Compare this job description against your profile to see the
-                  match score and missing keywords.
-                </p>
-                <Button
-                  className="mt-5"
-                  onClick={analyzeNow}
-                  disabled={analyzing}
-                >
-                  {analyzing ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Sparkles className="h-4 w-4 text-blue-600" />
-                  )}
-                  {analyzing ? "Analyzing…" : "Analyze match"}
-                </Button>
-              </div>
-            )}
+          {/* ===== Left: match & gaps (scrolls) + pinned finish bar ===== */}
+          <aside className="flex flex-col gap-6 self-start print:hidden lg:sticky lg:top-20 lg:h-[calc(100vh-7rem)]">
+            <div className="min-h-0 flex-1 space-y-8 overflow-y-auto pr-1 lg:pr-3">
+              {job.analysis ? (
+                <AnalysisBlock
+                  analysis={job.analysis}
+                  matchedLive={matchedLive}
+                  missingLive={missingLive}
+                  score={score}
+                  targets={targets}
+                  categories={categories}
+                  onQuickAdd={quickAdd}
+                  onNavigate={navigate}
+                  onHighlight={highlight}
+                  autofitting={autofitting}
+                  onAutoFit={autoFit}
+                />
+              ) : (
+                <div className="rounded-xl border border-dashed border-border p-12 text-center">
+                  <h2 className="text-base font-medium">No analysis yet</h2>
+                  <p className="mx-auto mt-1.5 max-w-md text-sm text-muted-foreground">
+                    Compare this job description against your profile to see
+                    the match score and missing keywords.
+                  </p>
+                  <Button
+                    className="mt-5"
+                    onClick={analyzeNow}
+                    disabled={analyzing}
+                  >
+                    {analyzing ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-4 w-4 text-blue-600" />
+                    )}
+                    {analyzing ? "Analyzing…" : "Analyze match"}
+                  </Button>
+                </div>
+              )}
+            </div>
 
-            {/* Notes for the AI (legacy data still shows) */}
-            {Object.entries(job.analysis?.notes ?? {}).length > 0 && (
-              <section>
-                <h2 className="text-base font-medium">Context for the AI</h2>
-                <ul className="mt-3 space-y-1.5">
-                  {Object.entries(job.analysis?.notes ?? {}).map(
-                    ([kw, note]) => (
-                      <li key={kw} className="text-sm text-muted-foreground">
-                        <span className="font-medium text-foreground">
-                          {kw}
-                        </span>{" "}
-                        — {note}
-                      </li>
-                    ),
-                  )}
-                </ul>
-              </section>
-            )}
+            {/* Always-visible finish bar */}
+            <div className="shrink-0 border-t border-border pt-4">
+              <Button onClick={() => window.print()} className="w-full">
+                <Printer className="h-4 w-4" />
+                Print / Save as PDF
+              </Button>
+              <p className="mt-2.5 text-xs leading-relaxed text-muted-foreground">
+                Click any line to edit it. Hover a section to reveal{" "}
+                <span className="font-medium text-foreground">+ add</span> a
+                bullet — or flash a section from a missing keyword, then use
+                its add option. When you&apos;re happy, print above.
+              </p>
+            </div>
           </aside>
 
-          {/* ===== Right: the live CV — edit inline, watch the score, print ===== */}
+          {/* ===== Right: the live CV — edit inline, watch the score ===== */}
           <div className="min-w-0">
-            <CvPreview
-              profile={profile}
-              job={job}
-              onPrint={() => window.print()}
-              onEditProfile={updateProfile}
-            />
+            <CvPreview profile={profile} job={job} onEditProfile={updateProfile} />
           </div>
         </div>
       </main>
@@ -382,6 +370,17 @@ function AnalysisBlock({
   autofitting,
   onAutoFit,
 }: AnalysisBlockProps) {
+  const [askAi, setAskAi] = useState(false);
+  const [prompt, setPrompt] = useState("");
+
+  // Collapse the prompt form once nothing is missing anymore
+  useEffect(() => {
+    if (missingLive.length === 0) {
+      setAskAi(false);
+      setPrompt("");
+    }
+  }, [missingLive.length]);
+
   return (
     <>
       {/* Score — updates live as keywords land in the CV */}
@@ -425,24 +424,7 @@ function AnalysisBlock({
 
       {/* Missing */}
       <section>
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-base font-medium">Missing from your data</h2>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={autofitting || missingLive.length === 0}
-            onClick={onAutoFit}
-            title="AI weaves every missing keyword into your CV (1 API call)"
-          >
-            {autofitting ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Sparkles className="h-3.5 w-3.5 text-blue-600" />
-            )}
-            AI auto-fit
-          </Button>
-        </div>
+        <h2 className="text-base font-medium">Missing from your data</h2>
         {missingLive.length === 0 ? (
           <p className="mt-1.5 flex items-center gap-1.5 text-sm text-emerald-700 dark:text-emerald-400">
             <Check className="h-3.5 w-3.5" />
@@ -465,6 +447,65 @@ function AnalysisBlock({
                   onNavigate={(targetId) => onNavigate(targetId)}
                 />
               ))}
+            </div>
+
+            {/* Ask AI — user-written prompt, one mocked call for all keywords */}
+            <div className="mt-5 rounded-xl border border-dashed border-border p-3">
+              {!askAi ? (
+                <button
+                  type="button"
+                  onClick={() => setAskAi(true)}
+                  className="flex w-full items-center justify-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  <Sparkles className="h-3.5 w-3.5 text-blue-600" />
+                  Ask AI to fit {missingLive.length} keyword
+                  {missingLive.length > 1 ? "s" : ""} in
+                </button>
+              ) : (
+                <div className="space-y-2.5">
+                  <div>
+                    <p className="text-sm font-medium">Your prompt</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Tell the AI how to weave {missingLive.join(", ")} into
+                      your CV.
+                    </p>
+                  </div>
+                  <Textarea
+                    autoFocus
+                    rows={3}
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    placeholder="Example: mention Kubernetes in the context of my platform role — keep each bullet to one sentence and stay factual."
+                  />
+                  <div className="flex items-center justify-end gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      disabled={autofitting}
+                      onClick={() => {
+                        setAskAi(false);
+                        setPrompt("");
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={autofitting || prompt.trim().length === 0}
+                      onClick={() => onAutoFit(prompt.trim())}
+                    >
+                      {autofitting ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Sparkles className="h-4 w-4 text-blue-600" />
+                      )}
+                      {autofitting ? "Fitting…" : "Generate"}
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           </>
         )}
