@@ -138,6 +138,28 @@
   }
 }
 
+/* Slimmer, subtler scrollbars everywhere (incl. the workspace panes) */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(163 163 163 / 0.5) transparent; /* neutral-400/50 */
+}
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: rgb(163 163 163 / 0.5);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(115 115 115 / 0.7);
+}
+
 /* ===== Print / Save-as-PDF (A4) ===== */
 /* margin 0 makes Chrome omit its automatic page headers/footers
    (date, page title, URL) — the sheet adds its own padding instead */

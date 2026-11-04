@@ -175,13 +175,17 @@ function Editable({
 
 /** Inline "add" affordance (same editing UX as Editable): hidden until
  *  its section is hovered or flashed amber; then opens an empty textarea.
- *  Enter or blur saves, empty text is discarded, Escape cancels. */
+ *  Enter or blur saves, empty text is discarded, Escape cancels.
+ *  Positioned by the caller inside a reserved gap, so showing it never
+ *  pushes the CV content around. */
 function AddRow({
   label,
   onAdd,
+  className,
 }: {
   label: string;
   onAdd: (v: string) => void;
+  className?: string;
 }) {
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
@@ -194,45 +198,48 @@ function AddRow({
     setAdding(false);
   }
 
-  if (!adding) {
+  if (adding) {
     return (
-      <button
-        type="button"
-        title={label}
-        onClick={() => {
-          setDraft("");
-          skipBlur.current = false;
-          setAdding(true);
+      <textarea
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => {
+          if (skipBlur.current) return;
+          commit();
         }}
-        className="cv-add-row mt-0.5 inline-flex cursor-text items-center gap-1 text-[12px] text-neutral-400 transition-colors hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-300"
-      >
-        <Plus className="h-3 w-3" />
-        {label}
-      </button>
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            skipBlur.current = true;
+            setAdding(false);
+          } else if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            commit();
+          }
+        }}
+        rows={2}
+        className="w-full resize-none rounded-sm bg-white p-0.5 text-neutral-900 ring-2 ring-blue-600 outline-hidden [font-family:inherit] [font-size:inherit]"
+      />
     );
   }
 
   return (
-    <textarea
-      autoFocus
-      value={draft}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={() => {
-        if (skipBlur.current) return;
-        commit();
+    <button
+      type="button"
+      title={label}
+      onClick={() => {
+        setDraft("");
+        skipBlur.current = false;
+        setAdding(true);
       }}
-      onKeyDown={(e) => {
-        if (e.key === "Escape") {
-          skipBlur.current = true;
-          setAdding(false);
-        } else if (e.key === "Enter" && !e.shiftKey) {
-          e.preventDefault();
-          commit();
-        }
-      }}
-      rows={2}
-      className="w-full resize-none rounded-sm bg-white p-0.5 text-neutral-900 ring-2 ring-blue-600 outline-hidden [font-family:inherit] [font-size:inherit]"
-    />
+      className={cn(
+        "cv-add-row cursor-text items-center gap-1 text-[12px] text-neutral-400 transition-colors hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-300",
+        className,
+      )}
+    >
+      <Plus className="h-3 w-3" />
+      {label}
+    </button>
   );
 }
 
@@ -358,47 +365,48 @@ export function CvPreview({
                       {fmtRange(exp.startDate, exp.endDate, L.present)}
                     </p>
                   </div>
-                  <ul className="mt-1 list-disc space-y-0.5 pl-5 leading-snug">
-                    {exp.bullets.map((b, i) => (
-                      <li key={i}>
-                        <Editable
-                          block
-                          value={b}
-                          placeholder={L.ph.bullet}
-                          onSave={(v) =>
-                            onEditProfile((p) => ({
-                              ...p,
-                              experience: p.experience.map((e) =>
-                                e.id === exp.id
-                                  ? {
-                                      ...e,
-                                      bullets: e.bullets.map((eb, bi) =>
-                                        bi === i ? v : eb,
-                                      ),
-                                    }
-                                  : e,
-                              ),
-                            }))
-                          }
-                        />
-                      </li>
-                    ))}
-                    <li className="list-none">
-                      <AddRow
-                        label={L.addBullet}
-                        onAdd={(v) =>
-                          onEditProfile((p) => ({
-                            ...p,
-                            experience: p.experience.map((e) =>
-                              e.id === exp.id
-                                ? { ...e, bullets: [...e.bullets, v] }
-                                : e,
-                            ),
-                          }))
-                        }
-                      />
-                    </li>
-                  </ul>
+                  <div className="relative mt-1">
+                    <ul className="list-disc space-y-0.5 pl-5 leading-snug pb-7 print:pb-0">
+                      {exp.bullets.map((b, i) => (
+                        <li key={i}>
+                          <Editable
+                            block
+                            value={b}
+                            placeholder={L.ph.bullet}
+                            onSave={(v) =>
+                              onEditProfile((p) => ({
+                                ...p,
+                                experience: p.experience.map((e) =>
+                                  e.id === exp.id
+                                    ? {
+                                        ...e,
+                                        bullets: e.bullets.map((eb, bi) =>
+                                          bi === i ? v : eb,
+                                        ),
+                                      }
+                                    : e,
+                                ),
+                              }))
+                            }
+                          />
+                        </li>
+                      ))}
+                    </ul>
+                    <AddRow
+                      label={L.addBullet}
+                      className="absolute bottom-1 left-5"
+                      onAdd={(v) =>
+                        onEditProfile((p) => ({
+                          ...p,
+                          experience: p.experience.map((e) =>
+                            e.id === exp.id
+                              ? { ...e, bullets: [...e.bullets, v] }
+                              : e,
+                          ),
+                        }))
+                      }
+                    />
+                  </div>
                 </li>
               ))}
             </ul>
@@ -427,47 +435,48 @@ export function CvPreview({
                       {prj.techStack.join(", ")}
                     </p>
                   )}
-                  <ul className="mt-1 list-disc space-y-0.5 pl-5 leading-snug">
-                    {prj.bullets.map((b, i) => (
-                      <li key={i}>
-                        <Editable
-                          block
-                          value={b}
-                          placeholder={L.ph.bullet}
-                          onSave={(v) =>
-                            onEditProfile((p) => ({
-                              ...p,
-                              projects: p.projects.map((pr) =>
-                                pr.id === prj.id
-                                  ? {
-                                      ...pr,
-                                      bullets: pr.bullets.map((pb, pi) =>
-                                        pi === i ? v : pb,
-                                      ),
-                                    }
-                                  : pr,
-                              ),
-                            }))
-                          }
-                        />
-                      </li>
-                    ))}
-                    <li className="list-none">
-                      <AddRow
-                        label={L.addBullet}
-                        onAdd={(v) =>
-                          onEditProfile((p) => ({
-                            ...p,
-                            projects: p.projects.map((pr) =>
-                              pr.id === prj.id
-                                ? { ...pr, bullets: [...pr.bullets, v] }
-                                : pr,
-                            ),
-                          }))
-                        }
-                      />
-                    </li>
-                  </ul>
+                  <div className="relative mt-1">
+                    <ul className="list-disc space-y-0.5 pl-5 leading-snug pb-7 print:pb-0">
+                      {prj.bullets.map((b, i) => (
+                        <li key={i}>
+                          <Editable
+                            block
+                            value={b}
+                            placeholder={L.ph.bullet}
+                            onSave={(v) =>
+                              onEditProfile((p) => ({
+                                ...p,
+                                projects: p.projects.map((pr) =>
+                                  pr.id === prj.id
+                                    ? {
+                                        ...pr,
+                                        bullets: pr.bullets.map((pb, pi) =>
+                                          pi === i ? v : pb,
+                                        ),
+                                      }
+                                    : pr,
+                                ),
+                              }))
+                            }
+                          />
+                        </li>
+                      ))}
+                    </ul>
+                    <AddRow
+                      label={L.addBullet}
+                      className="absolute bottom-1 left-5"
+                      onAdd={(v) =>
+                        onEditProfile((p) => ({
+                          ...p,
+                          projects: p.projects.map((pr) =>
+                            pr.id === prj.id
+                              ? { ...pr, bullets: [...pr.bullets, v] }
+                              : pr,
+                          ),
+                        }))
+                      }
+                    />
+                  </div>
                 </li>
               ))}
             </ul>
