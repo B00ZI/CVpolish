@@ -146,17 +146,14 @@
   margin: 0;
 }
 
-/* Keyword highlight: brief flash on CV text when clicked from the panel */
-@keyframes kw-flash {
-  0% {
-    background-color: rgb(254 240 138); /* amber-200 */
-  }
-  100% {
-    background-color: transparent;
-  }
+/* Keyword highlight: solid hit color, held ~3s, then cleared by JS */
+.kw-hit {
+  background-color: rgb(16 185 129); /* emerald-500 */
+  color: #fff;
+  border-radius: 4px;
 }
-.kw-flash {
-  animation: kw-flash 1.8s ease-out 1;
+.kw-hit-soft {
+  background-color: rgb(253 230 138); /* amber-200 */
   border-radius: 4px;
 }
 

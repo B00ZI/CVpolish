@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Check, Loader2, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -50,6 +50,22 @@ export function Workspace({ jobId }: { jobId: string }) {
   const [profile, setProfile] = useState<MasterProfile>(mockProfile);
   const [analyzing, setAnalyzing] = useState(false);
   const [autofitting, setAutofitting] = useState(false);
+  const hitTimer = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (hitTimer.current) clearTimeout(hitTimer.current);
+    };
+  }, []);
+
+  /** Remove active highlight classes from the CV. */
+  function clearHits() {
+    document
+      .querySelectorAll(".kw-hit, .kw-hit-soft")
+      .forEach((el) => el.classList.remove("kw-hit", "kw-hit-soft"));
+    if (hitTimer.current) clearTimeout(hitTimer.current);
+    hitTimer.current = null;
+  }
 
   useEffect(() => {
     const j = getJob(jobId);
@@ -150,11 +166,14 @@ export function Workspace({ jobId }: { jobId: string }) {
       `[data-cv-target="${targetId}"]`,
     );
     if (!el) return;
+    clearHits();
+    el.classList.add("kw-hit-soft");
     el.scrollIntoView({ behavior: "smooth", block: "center" });
     openSoon(el);
+    hitTimer.current = window.setTimeout(clearHits, 3000);
   }
 
-  /** Flash every CV spot where a keyword appears (green-chip click). */
+  /** Solid keyword hit: every CV spot containing the kw turns emerald ~3s. */
   function highlight(keyword: string) {
     const root = document.getElementById("cv-preview");
     if (!root) return;
@@ -169,12 +188,10 @@ export function Workspace({ jobId }: { jobId: string }) {
       });
       return;
     }
-    for (const el of hits) {
-      el.classList.remove("kw-flash");
-      void el.offsetWidth; // restart the animation
-      el.classList.add("kw-flash");
-    }
+    clearHits();
+    for (const el of hits) el.classList.add("kw-hit");
     hits[0].scrollIntoView({ behavior: "smooth", block: "center" });
+    hitTimer.current = window.setTimeout(clearHits, 3000);
   }
 
   function openSoon(el: HTMLElement) {
