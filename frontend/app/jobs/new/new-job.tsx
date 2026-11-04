@@ -101,7 +101,7 @@ export function NewJob() {
           <>
             <div className="flex items-center justify-between gap-4">
               <h1 className="text-2xl font-medium tracking-tight">
-                New CV from a job
+                Job description
               </h1>
               <button
                 onClick={() => setLang(null)}
@@ -113,27 +113,18 @@ export function NewJob() {
               </button>
             </div>
             <p className="mt-1.5 text-sm text-muted-foreground">
-              {lang === "fr"
-                ? "This CV is tailored from your French profile."
-                : "This CV is tailored from your English profile."}
+              One paste is enough — the title comes from the first line, and
+              the CV is tailored from your{" "}
+              {lang === "fr" ? "French" : "English"} profile.
             </p>
 
         <div className="mt-8 space-y-5 rounded-xl border border-border p-6">
-          <label className="block space-y-1.5">
-            <span className="text-sm text-muted-foreground">
-              Job description *
-            </span>
-            <Textarea
-              rows={16}
-              value={description}
-              placeholder={`Paste the full job posting here — title, company, responsibilities, requirements, tech stack.\n\nExample:\nFrontend Developer (React / Next.js) — Remote\n\nAt Northbound Labs we build analytics tools for logistics teams. You'll own major product surfaces in React and TypeScript, style with Tailwind CSS, integrate REST/GraphQL APIs, and ship continuously through CI/CD on AWS.`}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-          </label>
-          <p className="text-xs text-muted-foreground">
-            Title and company are read from the first line — one paste is
-            enough.
-          </p>
+          <Textarea
+            rows={16}
+            value={description}
+            placeholder={`Paste the full job posting here — title, company, responsibilities, requirements, tech stack.\n\nExample:\nFrontend Developer (React / Next.js) — Remote\n\nAt Northbound Labs we build analytics tools for logistics teams. You'll own major product surfaces in React and TypeScript, style with Tailwind CSS, integrate REST/GraphQL APIs, and ship continuously through CI/CD on AWS.`}
+            onChange={(e) => setDescription(e.target.value)}
+          />
 
           <div className="flex items-center justify-between gap-4 border-t border-border pt-5">
             <p className="text-xs text-muted-foreground">
