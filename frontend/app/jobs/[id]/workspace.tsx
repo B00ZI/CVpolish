@@ -348,7 +348,7 @@ export function Workspace({ jobId }: { jobId: string }) {
 
           {/* ===== Right: the live CV — scrolls independently; padding keeps
               the sheet from ending at the pane's bottom edge ===== */}
-          <div className="cv-scroll min-w-0 pb-24 lg:pr-4 print:h-auto print:overflow-visible print:pb-0 lg:h-full lg:overflow-y-auto">
+          <div className="min-w-0 pb-24 pr-6 print:h-auto print:overflow-visible print:pb-0 lg:h-full lg:overflow-y-auto">
             <CvPreview profile={profile} job={job} onEditProfile={updateProfile} />
           </div>
         </div>
