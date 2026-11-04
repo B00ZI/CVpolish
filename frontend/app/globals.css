@@ -162,15 +162,15 @@
   border-radius: 4px;
 }
 
-/* Inline "+ add" rows in the CV preview: hidden until their section is
-   hovered or flashed amber from the missing-keyword panel */
+/* Inline "+ add" rows in the CV preview: not rendered at all until their
+   section is hovered or flashed amber from the missing-keyword panel
+   (no reserved space, no invisible gap) */
 .cv-add-row {
-  opacity: 0;
-  transition: opacity 150ms ease;
+  display: none;
 }
 :is(li, section)[data-cv-target]:hover .cv-add-row,
 :is(li, section)[data-cv-target].kw-hit-soft .cv-add-row {
-  opacity: 1;
+  display: inline-flex;
 }
 @media print {
   .cv-add-row {
