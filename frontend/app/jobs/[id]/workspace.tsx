@@ -77,7 +77,7 @@ export function Workspace({ jobId }: { jobId: string }) {
     <div className="min-h-screen print:min-h-0">
       {/* Top bar */}
       <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur print:hidden">
-        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-6">
+        <div className="mx-auto flex h-14 max-w-[1500px] items-center justify-between gap-4 px-6">
           <div className="flex min-w-0 items-center gap-4">
             <Link
               href="/"
@@ -101,8 +101,8 @@ export function Workspace({ jobId }: { jobId: string }) {
       </header>
 
       {/* Single view: match & gaps on the left, live CV on the right */}
-      <main className="mx-auto max-w-6xl px-6 pb-24 pt-8 print:p-0">
-        <div className="grid gap-8 lg:grid-cols-[minmax(320px,400px)_1fr] print:block">
+      <main className="mx-auto max-w-[1500px] px-6 pb-24 pt-8 print:p-0">
+        <div className="grid gap-10 lg:grid-cols-[minmax(360px,440px)_1fr] print:block">
           {/* ===== Left: match & gaps ===== */}
           <aside className="space-y-8 self-start print:hidden lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
             {job.analysis ? (
