@@ -261,9 +261,9 @@ export function Workspace({ jobId }: { jobId: string }) {
   }
 
   return (
-    <div className="min-h-screen print:min-h-0">
+    <div className="min-h-screen print:min-h-0 lg:flex lg:h-screen lg:flex-col lg:overflow-hidden print:h-auto lg:print:overflow-visible">
       {/* Top bar */}
-      <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur print:hidden">
+      <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur print:hidden lg:shrink-0">
         <div className="mx-auto flex h-14 max-w-[1500px] items-center justify-between gap-4 px-6">
           <div className="flex min-w-0 items-center gap-4">
             <Link
@@ -287,12 +287,13 @@ export function Workspace({ jobId }: { jobId: string }) {
         </div>
       </header>
 
-      {/* Single view: match & gaps on the left, live CV on the right */}
-      <main className="mx-auto max-w-[1500px] px-6 pb-24 pt-8 print:p-0">
-        <div className="grid gap-10 lg:grid-cols-[minmax(360px,440px)_1fr] print:block">
-          {/* ===== Left: match & gaps (scrolls) + pinned finish bar ===== */}
-          <aside className="flex flex-col gap-6 self-start print:hidden lg:sticky lg:top-20 lg:h-[calc(100vh-7rem)]">
-            <div className="min-h-0 flex-1 space-y-8 overflow-y-auto pr-1 lg:pr-3">
+      {/* Single view: two independent panes on desktop — the left panel
+          is fully pinned (it never moves, no matter how far you scroll) */}
+      <main className="mx-auto max-w-[1500px] px-6 pb-24 pt-8 print:p-0 lg:flex lg:h-full lg:min-h-0 lg:pr-3">
+        <div className="grid gap-10 lg:h-full lg:w-full lg:grid-cols-[minmax(360px,440px)_1fr] print:block">
+          {/* ===== Left: match & gaps (its own scroll) + pinned finish bar ===== */}
+          <aside className="flex flex-col gap-6 print:hidden lg:h-full lg:pr-3">
+            <div className="min-h-0 flex-1 space-y-8 overflow-y-auto pr-0">
               {job.analysis ? (
                 <AnalysisBlock
                   analysis={job.analysis}
@@ -345,8 +346,8 @@ export function Workspace({ jobId }: { jobId: string }) {
             </div>
           </aside>
 
-          {/* ===== Right: the live CV — edit inline, watch the score ===== */}
-          <div className="min-w-0">
+          {/* ===== Right: the live CV — scrolls independently ===== */}
+          <div className="min-w-0 print:h-auto print:overflow-visible lg:h-full lg:overflow-y-auto">
             <CvPreview profile={profile} job={job} onEditProfile={updateProfile} />
           </div>
         </div>
