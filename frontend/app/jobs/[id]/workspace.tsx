@@ -2,19 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import {
-  ArrowLeft,
-  ArrowRight,
-  Check,
-  Loader2,
-  Sparkles,
-  X,
-} from "lucide-react";
+import { ArrowLeft, Check, Loader2, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Popover,
   PopoverContent,
@@ -23,23 +14,15 @@ import {
 import { toast } from "sonner";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
-import type { GapAnalysis, Job, MasterProfile, RewriteDiff } from "@/lib/types";
+import type { GapAnalysis, Job, MasterProfile } from "@/lib/types";
 import { getJob, upsertJob } from "@/lib/jobs-store";
 import { loadProfile, saveProfile } from "@/lib/profile-store";
-import { mockAnalyze, mockProfile, mockRewrites, withDelay } from "@/mock";
+import { mockAnalyze, mockProfile, withDelay } from "@/mock";
 import { CvPreview } from "./cv-preview";
-
-const SECTION_LABEL: Record<RewriteDiff["section"], string> = {
-  summary: "Summary",
-  experience: "Experience",
-  projects: "Project",
-};
 
 export function Workspace({ jobId }: { jobId: string }) {
   const [job, setJob] = useState<Job | null | undefined>(undefined);
   const [profile, setProfile] = useState<MasterProfile>(mockProfile);
-  const [tab, setTab] = useState("match");
-  const [generating, setGenerating] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
 
   useEffect(() => {
@@ -82,17 +65,6 @@ export function Workspace({ jobId }: { jobId: string }) {
     );
   }
 
-  const acceptedCount = job.rewrites.filter((r) => r.accepted === true).length;
-
-  async function generateRewrites() {
-    if (!job) return;
-    setGenerating(true);
-    const fresh = job;
-    await withDelay(null, 1800);
-    mutate((j) => ({ ...j, rewrites: mockRewrites(fresh, profile) }));
-    setGenerating(false);
-  }
-
   async function analyzeNow() {
     if (analyzing) return;
     setAnalyzing(true);
@@ -101,20 +73,11 @@ export function Workspace({ jobId }: { jobId: string }) {
     setAnalyzing(false);
   }
 
-  function setRewrite(id: string, accepted: boolean) {
-    mutate((j) => ({
-      ...j,
-      rewrites: j.rewrites.map((r) =>
-        r.id === id ? { ...r, accepted } : r,
-      ),
-    }));
-  }
-
   return (
     <div className="min-h-screen print:min-h-0">
       {/* Top bar */}
       <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur print:hidden">
-        <div className="mx-auto flex h-14 max-w-4xl items-center justify-between gap-4 px-6">
+        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-6">
           <div className="flex min-w-0 items-center gap-4">
             <Link
               href="/"
@@ -137,16 +100,11 @@ export function Workspace({ jobId }: { jobId: string }) {
         </div>
       </header>
 
-      <main className="mx-auto max-w-4xl px-6 pb-24 pt-8 print:p-0">
-        <Tabs value={tab} onValueChange={setTab}>
-          <TabsList className="print:hidden">
-            <TabsTrigger value="match">Match & gaps</TabsTrigger>
-            <TabsTrigger value="rewrite">Rewrite</TabsTrigger>
-            <TabsTrigger value="preview">Preview & PDF</TabsTrigger>
-          </TabsList>
-
-          {/* ===== Tab 1: Match & gaps ===== */}
-          <TabsContent value="match" className="mt-6 space-y-8">
+      {/* Single view: match & gaps on the left, live CV on the right */}
+      <main className="mx-auto max-w-6xl px-6 pb-24 pt-8 print:p-0">
+        <div className="grid gap-8 lg:grid-cols-[minmax(320px,400px)_1fr] print:block">
+          {/* ===== Left: match & gaps ===== */}
+          <aside className="space-y-8 self-start print:hidden lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
             {job.analysis ? (
               <AnalysisBlock
                 analysis={job.analysis}
@@ -210,128 +168,10 @@ export function Workspace({ jobId }: { jobId: string }) {
                 </ul>
               </section>
             )}
+          </aside>
 
-            <div className="flex justify-end border-t border-border pt-6">
-              <Button onClick={() => setTab("rewrite")}>
-                Continue to rewrite
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </TabsContent>
-
-          {/* ===== Tab 2: Rewrite ===== */}
-          <TabsContent value="rewrite" className="mt-6 space-y-6">
-            {job.rewrites.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-border p-12 text-center">
-                <h2 className="text-base font-medium">
-                  Tailor your CV for this job
-                </h2>
-                <p className="mx-auto mt-1.5 max-w-md text-sm text-muted-foreground">
-                  Your profile, this job&apos;s keywords, and your notes get
-                  rewritten into stronger bullets. You review every change.
-                </p>
-                <Button
-                  className="mt-5"
-                  onClick={generateRewrites}
-                  disabled={generating}
-                >
-                  {generating ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Sparkles className="h-4 w-4 text-blue-600" />
-                  )}
-                  {generating ? "Rewriting…" : "Rewrite for this job"}
-                </Button>
-              </div>
-            ) : (
-              <>
-                <div className="flex items-center justify-between">
-                  <p className="text-sm text-muted-foreground">
-                    {acceptedCount} of {job.rewrites.length} suggestions
-                    accepted
-                  </p>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() =>
-                      mutate((j) => ({
-                        ...j,
-                        rewrites: j.rewrites.map((r) => ({
-                          ...r,
-                          accepted: true,
-                        })),
-                      }))
-                    }
-                  >
-                    <Check className="h-3.5 w-3.5" />
-                    Accept all
-                  </Button>
-                </div>
-
-                {job.rewrites.map((rw) => (
-                  <div key={rw.id} className="rounded-xl border border-border p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <Badge variant="outline">{SECTION_LABEL[rw.section]}</Badge>
-                      {rw.accepted === true ? (
-                        <span className="flex items-center gap-1 text-xs text-emerald-700 dark:text-emerald-400">
-                          <Check className="h-3.5 w-3.5" /> Accepted
-                        </span>
-                      ) : rw.accepted === false ? (
-                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <X className="h-3.5 w-3.5" /> Original kept
-                        </span>
-                      ) : (
-                        <span className="flex gap-1">
-                          <button
-                            type="button"
-                            aria-label="Accept suggestion"
-                            onClick={() => setRewrite(rw.id, true)}
-                            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-emerald-50 hover:text-emerald-700 dark:hover:bg-emerald-950"
-                          >
-                            <Check className="h-4 w-4" />
-                          </button>
-                          <button
-                            type="button"
-                            aria-label="Keep original"
-                            onClick={() => setRewrite(rw.id, false)}
-                            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
-                        </span>
-                      )}
-                    </div>
-                    <p className="mt-3 border-l-2 border-border pl-3 text-sm text-muted-foreground">
-                      {rw.original}
-                    </p>
-                    <p
-                      className={cn(
-                        "mt-2 pl-3 text-sm",
-                        rw.accepted === false && "text-muted-foreground",
-                      )}
-                    >
-                      {rw.rewritten}
-                    </p>
-                  </div>
-                ))}
-
-                <div className="flex justify-end border-t border-border pt-6">
-                  <Button
-                    onClick={() => {
-                      mutate((j) => ({ ...j, status: "tailed" }));
-                      setTab("preview");
-                    }}
-                  >
-                    Build my CV
-                    <ArrowRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              </>
-            )}
-          </TabsContent>
-
-          {/* ===== Tab 3: Preview & PDF ===== */}
-          <TabsContent value="preview" className="mt-6 print:mt-0">
+          {/* ===== Right: the live CV — edit inline, watch the score, print ===== */}
+          <div className="min-w-0">
             <CvPreview
               profile={profile}
               job={job}
@@ -341,17 +181,9 @@ export function Workspace({ jobId }: { jobId: string }) {
                 setProfile(next);
                 saveProfile(next, job.language);
               }}
-              onEditRewrite={(rewriteId, text) =>
-                mutate((j) => ({
-                  ...j,
-                  rewrites: j.rewrites.map((r) =>
-                    r.id === rewriteId ? { ...r, rewritten: text } : r,
-                  ),
-                }))
-              }
             />
-          </TabsContent>
-        </Tabs>
+          </div>
+        </div>
       </main>
     </div>
   );

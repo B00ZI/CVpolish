@@ -129,70 +129,18 @@ function Editable({
   );
 }
 
-/** A line of text in the preview + where it came from (rewrite or profile). */
-interface Displayed {
-  text: string;
-  rewriteId?: string;
-}
-
-/** Apply accepted rewrites on top of the master profile. */
-function tailor(profile: MasterProfile, job: Job) {
-  const accepted = job.rewrites.filter((r) => r.accepted === true);
-
-  const summaryDiff = accepted.find((r) => r.section === "summary");
-  const summary: Displayed = summaryDiff
-    ? { text: summaryDiff.rewritten, rewriteId: summaryDiff.id }
-    : { text: profile.summary };
-
-  const experience = profile.experience.map((exp) => {
-    const reps = accepted.filter(
-      (r) => r.section === "experience" && r.refId === exp.id,
-    );
-    return {
-      ...exp,
-      bullets: exp.bullets.map((b): Displayed => {
-        const rep = reps.find((r) => r.original === b);
-        return rep
-          ? { text: rep.rewritten, rewriteId: rep.id }
-          : { text: b };
-      }),
-    };
-  });
-
-  const projects = profile.projects.map((prj) => {
-    const reps = accepted.filter(
-      (r) => r.section === "projects" && r.refId === prj.id,
-    );
-    return {
-      ...prj,
-      bullets: prj.bullets.map((b): Displayed => {
-        const rep = reps.find((r) => r.original === b);
-        return rep
-          ? { text: rep.rewritten, rewriteId: rep.id }
-          : { text: b };
-      }),
-    };
-  });
-
-  return { summary, experience, projects };
-}
-
 export function CvPreview({
   profile,
   job,
   onPrint,
   onEditProfile,
-  onEditRewrite,
 }: {
   profile: MasterProfile;
   job: Job;
   onPrint: () => void;
   /** Persist an edit to the master profile. */
   onEditProfile: (fn: (p: MasterProfile) => MasterProfile) => void;
-  /** Persist an edit to an accepted rewrite (text shown came from it). */
-  onEditRewrite: (rewriteId: string, text: string) => void;
 }) {
-  const { summary, experience, projects } = tailor(profile, job);
   const L = LABELS[job.language];
   const c = profile.contact;
   const contactLine = [c.phone, c.email, c.city]
@@ -253,17 +201,13 @@ export function CvPreview({
         </header>
 
         {/* Summary */}
-        {summary.text && (
+        {profile.summary && (
           <Section title={L.summary}>
             <p>
               <Editable
                 block
-                value={summary.text}
-                onSave={(v) =>
-                  summary.rewriteId
-                    ? onEditRewrite(summary.rewriteId, v)
-                    : onEditProfile((p) => ({ ...p, summary: v }))
-                }
+                value={profile.summary}
+                onSave={(v) => onEditProfile((p) => ({ ...p, summary: v }))}
               />
             </p>
           </Section>
@@ -302,10 +246,10 @@ export function CvPreview({
         )}
 
         {/* Experience */}
-        {experience.length > 0 && (
+        {profile.experience.length > 0 && (
           <Section title={L.experience}>
             <ul className="space-y-4">
-              {experience.map((exp) => (
+              {profile.experience.map((exp) => (
                 <li key={exp.id}>
                   <div className="flex items-baseline justify-between gap-4">
                     <p className="font-semibold">
@@ -325,23 +269,21 @@ export function CvPreview({
                       <li key={i}>
                         <Editable
                           block
-                          value={b.text}
+                          value={b}
                           onSave={(v) =>
-                            b.rewriteId
-                              ? onEditRewrite(b.rewriteId, v)
-                              : onEditProfile((p) => ({
-                                  ...p,
-                                  experience: p.experience.map((e) =>
-                                    e.id === exp.id
-                                      ? {
-                                          ...e,
-                                          bullets: e.bullets.map((eb, bi) =>
-                                            bi === i ? v : eb,
-                                          ),
-                                        }
-                                      : e,
-                                  ),
-                                }))
+                            onEditProfile((p) => ({
+                              ...p,
+                              experience: p.experience.map((e) =>
+                                e.id === exp.id
+                                  ? {
+                                      ...e,
+                                      bullets: e.bullets.map((eb, bi) =>
+                                        bi === i ? v : eb,
+                                      ),
+                                    }
+                                  : e,
+                              ),
+                            }))
                           }
                         />
                       </li>
@@ -354,10 +296,10 @@ export function CvPreview({
         )}
 
         {/* Projects */}
-        {projects.length > 0 && (
+        {profile.projects.length > 0 && (
           <Section title={L.projects}>
             <ul className="space-y-4">
-              {projects.map((prj) => (
+              {profile.projects.map((prj) => (
                 <li key={prj.id}>
                   <p className="font-semibold leading-snug">
                     {prj.name}
@@ -380,23 +322,21 @@ export function CvPreview({
                       <li key={i}>
                         <Editable
                           block
-                          value={b.text}
+                          value={b}
                           onSave={(v) =>
-                            b.rewriteId
-                              ? onEditRewrite(b.rewriteId, v)
-                              : onEditProfile((p) => ({
-                                  ...p,
-                                  projects: p.projects.map((pr) =>
-                                    pr.id === prj.id
-                                      ? {
-                                          ...pr,
-                                          bullets: pr.bullets.map((pb, pi) =>
-                                            pi === i ? v : pb,
-                                          ),
-                                        }
-                                      : pr,
-                                  ),
-                                }))
+                            onEditProfile((p) => ({
+                              ...p,
+                              projects: p.projects.map((pr) =>
+                                pr.id === prj.id
+                                  ? {
+                                      ...pr,
+                                      bullets: pr.bullets.map((pb, pi) =>
+                                        pi === i ? v : pb,
+                                      ),
+                                    }
+                                  : pr,
+                              ),
+                            }))
                           }
                         />
                       </li>
@@ -418,9 +358,9 @@ export function CvPreview({
                   className="flex items-baseline justify-between gap-4"
                 >
                   <p>
-                  <Editable
-                    className="font-semibold"
-                    value={ed.degree}
+                    <Editable
+                      className="font-semibold"
+                      value={ed.degree}
                       onSave={(v) =>
                         onEditProfile((p) => ({
                           ...p,
