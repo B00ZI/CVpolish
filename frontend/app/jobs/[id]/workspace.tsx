@@ -264,7 +264,7 @@ export function Workspace({ jobId }: { jobId: string }) {
     <div className="min-h-screen print:min-h-0 lg:flex lg:h-screen lg:flex-col lg:overflow-hidden print:h-auto print:overflow-visible">
       {/* Top bar */}
       <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur print:hidden lg:shrink-0">
-        <div className="mx-auto flex h-14 max-w-[1500px] items-center justify-between gap-4 px-6">
+        <div className="mx-auto flex h-14 max-w-[1800px] items-center justify-between gap-4 px-6">
           <div className="flex min-w-0 items-center gap-4">
             <Link
               href="/"
@@ -289,8 +289,8 @@ export function Workspace({ jobId }: { jobId: string }) {
 
       {/* Single view: two independent panes on desktop — the left panel
           is fully pinned (it never moves, no matter how far you scroll) */}
-      <main className="mx-auto max-w-[1500px] px-6 pb-24 pt-8 print:p-0 lg:flex lg:h-full lg:min-h-0 lg:pb-2 lg:pr-3 print:h-auto print:overflow-visible">
-        <div className="grid gap-10 lg:h-full lg:w-full lg:grid-cols-[minmax(360px,440px)_1fr] lg:gap-16 print:block print:h-auto">
+      <main className="mx-auto max-w-[1800px] px-6 pb-24 pt-8 print:p-0 lg:flex lg:h-full lg:min-h-0 lg:pb-2 lg:pr-3 print:h-auto print:overflow-visible">
+        <div className="grid gap-10 lg:h-full lg:w-full lg:grid-cols-[minmax(380px,480px)_1fr] lg:gap-24 print:block print:h-auto">
           {/* ===== Left: match & gaps (its own scroll) + pinned finish bar ===== */}
           <aside className="flex flex-col gap-6 print:hidden lg:h-full lg:pr-3">
             <div className="cv-scroll min-h-0 flex-1 space-y-8 overflow-y-auto pr-0">
@@ -465,25 +465,19 @@ function AnalysisBlock({
                 </button>
               ) : (
                 <div className="space-y-2.5">
-                  <div>
-                    <p className="text-sm font-medium">Your prompt</p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      Tell the AI how to weave {missingLive.join(", ")} into
-                      your CV.
-                    </p>
-                  </div>
                   <Textarea
                     autoFocus
                     rows={3}
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
-                    placeholder="Example: mention Kubernetes in the context of my platform role — keep each bullet to one sentence and stay factual."
+                    placeholder="Say where each keyword is used and how — tied to your existing experience and projects. Example: Kubernetes fits my platform-engineer role, where I led the cluster migration and set up autoscaling."
                   />
-                  <div className="flex items-center justify-end gap-2">
+                  <div className="flex items-center gap-2">
                     <Button
                       type="button"
                       size="sm"
                       variant="ghost"
+                      className="flex-1"
                       disabled={autofitting}
                       onClick={() => {
                         setAskAi(false);
@@ -495,6 +489,7 @@ function AnalysisBlock({
                     <Button
                       type="button"
                       size="sm"
+                      className="flex-1"
                       disabled={autofitting || prompt.trim().length === 0}
                       onClick={() => onAutoFit(prompt.trim())}
                     >
