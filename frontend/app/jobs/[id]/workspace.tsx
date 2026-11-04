@@ -290,10 +290,10 @@ export function Workspace({ jobId }: { jobId: string }) {
       {/* Single view: two independent panes on desktop — the left panel
           is fully pinned (it never moves, no matter how far you scroll) */}
       <main className="mx-auto max-w-[1500px] px-6 pb-24 pt-8 print:p-0 lg:flex lg:h-full lg:min-h-0 lg:pb-2 lg:pr-3 print:h-auto print:overflow-visible">
-        <div className="grid gap-10 lg:h-full lg:w-full lg:grid-cols-[minmax(360px,440px)_1fr] print:block print:h-auto">
+        <div className="grid gap-10 lg:h-full lg:w-full lg:grid-cols-[minmax(360px,440px)_1fr] lg:gap-16 print:block print:h-auto">
           {/* ===== Left: match & gaps (its own scroll) + pinned finish bar ===== */}
           <aside className="flex flex-col gap-6 print:hidden lg:h-full lg:pr-3">
-            <div className="min-h-0 flex-1 space-y-8 overflow-y-auto pr-0">
+            <div className="cv-scroll min-h-0 flex-1 space-y-8 overflow-y-auto pr-0">
               {job.analysis ? (
                 <AnalysisBlock
                   analysis={job.analysis}
@@ -348,7 +348,7 @@ export function Workspace({ jobId }: { jobId: string }) {
 
           {/* ===== Right: the live CV — scrolls independently; padding keeps
               the sheet from ending at the pane's bottom edge ===== */}
-          <div className="min-w-0 pb-24 print:h-auto print:overflow-visible print:pb-0 lg:h-full lg:overflow-y-auto">
+          <div className="cv-scroll min-w-0 pb-24 lg:pr-6 print:h-auto print:overflow-visible print:pb-0 lg:h-full lg:overflow-y-auto">
             <CvPreview profile={profile} job={job} onEditProfile={updateProfile} />
           </div>
         </div>
