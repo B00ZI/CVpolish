@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Printer } from "lucide-react";
+import { Plus, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { Job, Language, MasterProfile } from "@/lib/types";
@@ -19,6 +19,10 @@ const LABELS: Record<
     certifications: string;
     present: string;
     graduated: string;
+    addBullet: string;
+    addRole: string;
+    addProject: string;
+    ph: { jobTitle: string; company: string; location: string; dates: string; bullet: string };
   }
 > = {
   en: {
@@ -30,6 +34,16 @@ const LABELS: Record<
     certifications: "Certifications",
     present: "Present",
     graduated: "Class of",
+    addBullet: "Add bullet",
+    addRole: "Add role",
+    addProject: "Add project",
+    ph: {
+      jobTitle: "Job title",
+      company: "Company",
+      location: "City",
+      dates: "Dates",
+      bullet: "Bullet",
+    },
   },
   fr: {
     summary: "Profil",
@@ -40,6 +54,16 @@ const LABELS: Record<
     certifications: "Certifications",
     present: "Présent",
     graduated: "Diplômé en",
+    addBullet: "Ajouter une ligne",
+    addRole: "Ajouter un poste",
+    addProject: "Ajouter un projet",
+    ph: {
+      jobTitle: "Intitulé du poste",
+      company: "Entreprise",
+      location: "Ville",
+      dates: "Période",
+      bullet: "Accomplissement",
+    },
   },
 };
 
@@ -49,16 +73,19 @@ function fmtRange(start: string, end: string | null, present: string): string {
 
 /** Click-to-edit text: renders as plain text until clicked, then a small
  *  textarea. Enter or blur saves, Escape cancels. Writes go through onSave
- *  (the parent persists them to the profile store). */
+ *  (the parent persists them to the profile store). Empty values render as
+ *  a clickable ghost placeholder so new entries stay editable in place. */
 function Editable({
   value,
   onSave,
   className,
+  placeholder = "…",
   block = false,
 }: {
   value: string;
   onSave: (v: string) => void;
   className?: string;
+  placeholder?: string;
   block?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
@@ -101,6 +128,30 @@ function Editable({
     );
   }
 
+  if (value === "") {
+    return (
+      <span
+        role="button"
+        tabIndex={0}
+        title="Click to edit"
+        onClick={open}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            open();
+          }
+        }}
+        className={cn(
+          "cursor-text rounded-sm text-neutral-400 transition-colors hover:bg-neutral-100 print:hidden dark:hover:bg-white/10",
+          block && "block",
+          className,
+        )}
+      >
+        {placeholder}
+      </span>
+    );
+  }
+
   return (
     <textarea
       autoFocus
@@ -125,6 +176,69 @@ function Editable({
         block ? "block" : "inline-block",
         className,
       )}
+    />
+  );
+}
+
+/** Inline "add" affordance (same editing UX as Editable): a muted row
+ *  that opens an empty textarea. Enter or blur saves, empty text is
+ *  discarded, Escape cancels. Screen-only (never printed). */
+function AddRow({
+  label,
+  onAdd,
+}: {
+  label: string;
+  onAdd: (v: string) => void;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState("");
+  const skipBlur = useRef(false);
+
+  function commit() {
+    const v = draft.trim();
+    if (v) onAdd(v);
+    skipBlur.current = true;
+    setAdding(false);
+  }
+
+  if (!adding) {
+    return (
+      <button
+        type="button"
+        title={label}
+        onClick={() => {
+          setDraft("");
+          skipBlur.current = false;
+          setAdding(true);
+        }}
+        className="mt-0.5 inline-flex cursor-text items-center gap-1 text-[12px] text-neutral-400 transition-colors hover:text-neutral-700 print:hidden dark:text-neutral-500 dark:hover:text-neutral-300"
+      >
+        <Plus className="h-3 w-3" />
+        {label}
+      </button>
+    );
+  }
+
+  return (
+    <textarea
+      autoFocus
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => {
+        if (skipBlur.current) return;
+        commit();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          skipBlur.current = true;
+          setAdding(false);
+        } else if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          commit();
+        }
+      }}
+      rows={2}
+      className="w-full resize-none rounded-sm bg-white p-0.5 text-neutral-900 ring-2 ring-blue-600 outline-hidden [font-family:inherit] [font-size:inherit]"
     />
   );
 }
@@ -270,6 +384,7 @@ export function CvPreview({
                         <Editable
                           block
                           value={b}
+                          placeholder={L.ph.bullet}
                           onSave={(v) =>
                             onEditProfile((p) => ({
                               ...p,
@@ -288,9 +403,47 @@ export function CvPreview({
                         />
                       </li>
                     ))}
+                    <li className="list-none">
+                      <AddRow
+                        label={L.addBullet}
+                        onAdd={(v) =>
+                          onEditProfile((p) => ({
+                            ...p,
+                            experience: p.experience.map((e) =>
+                              e.id === exp.id
+                                ? { ...e, bullets: [...e.bullets, v] }
+                                : e,
+                            ),
+                          }))
+                        }
+                      />
+                    </li>
                   </ul>
                 </li>
               ))}
+              <li className="list-none">
+                <AddRow
+                  label={L.addRole}
+                  onAdd={(v) =>
+                    onEditProfile((p) => ({
+                      ...p,
+                      experience: [
+                        ...p.experience,
+                        {
+                          id: `exp-${Date.now()}`,
+                          jobTitle: v,
+                          company: "",
+                          location: "",
+                          startDate: "",
+                          endDate: null,
+                          bullets: [""],
+                          technologies: [],
+                        },
+                      ],
+                    }))
+                  }
+                />
+              </li>
             </ul>
           </Section>
         )}
@@ -323,6 +476,7 @@ export function CvPreview({
                         <Editable
                           block
                           value={b}
+                          placeholder={L.ph.bullet}
                           onSave={(v) =>
                             onEditProfile((p) => ({
                               ...p,
@@ -341,9 +495,45 @@ export function CvPreview({
                         />
                       </li>
                     ))}
+                    <li className="list-none">
+                      <AddRow
+                        label={L.addBullet}
+                        onAdd={(v) =>
+                          onEditProfile((p) => ({
+                            ...p,
+                            projects: p.projects.map((pr) =>
+                              pr.id === prj.id
+                                ? { ...pr, bullets: [...pr.bullets, v] }
+                                : pr,
+                            ),
+                          }))
+                        }
+                      />
+                    </li>
                   </ul>
                 </li>
               ))}
+              <li className="list-none">
+                <AddRow
+                  label={L.addProject}
+                  onAdd={(v) =>
+                    onEditProfile((p) => ({
+                      ...p,
+                      projects: [
+                        ...p.projects,
+                        {
+                          id: `prj-${Date.now()}`,
+                          name: v,
+                          description: "",
+                          techStack: [],
+                          links: [],
+                          bullets: [""],
+                        },
+                      ],
+                    }))
+                  }
+                />
+              </li>
             </ul>
           </Section>
         )}
