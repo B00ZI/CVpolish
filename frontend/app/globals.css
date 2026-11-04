@@ -146,9 +146,14 @@
   margin: 0;
 }
 
-/* Keyword highlight: solid hit color, held ~3s, then cleared by JS */
-.kw-hit {
+/* Keyword highlight: word-level via the CSS Custom Highlight API;
+   fallback (old browsers) = whole-span block highlight */
+::highlight(kw) {
   background-color: rgb(16 185 129); /* emerald-500 */
+  color: #fff;
+}
+.kw-hit { /* fallback for browsers without the Highlight API */
+  background-color: rgb(16 185 129);
   color: #fff;
   border-radius: 4px;
 }

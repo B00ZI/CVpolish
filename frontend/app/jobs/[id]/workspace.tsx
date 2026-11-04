@@ -63,6 +63,8 @@ export function Workspace({ jobId }: { jobId: string }) {
     document
       .querySelectorAll(".kw-hit, .kw-hit-soft")
       .forEach((el) => el.classList.remove("kw-hit", "kw-hit-soft"));
+    const H = (CSS as unknown as { highlights?: Map<string, unknown> }).highlights;
+    if (H) H.delete("kw");
     if (hitTimer.current) clearTimeout(hitTimer.current);
     hitTimer.current = null;
   }
@@ -173,24 +175,63 @@ export function Workspace({ jobId }: { jobId: string }) {
     hitTimer.current = window.setTimeout(clearHits, 3000);
   }
 
-  /** Solid keyword hit: every CV spot containing the kw turns emerald ~3s. */
+  /** Word-level keyword hit: only the exact word(s) turn emerald ~3s,
+   *  via the CSS Custom Highlight API (no DOM mutation, React-safe).
+   *  Old browsers fall back to whole-span block highlight. */
   function highlight(keyword: string) {
     const root = document.getElementById("cv-preview");
     if (!root) return;
-    const hits = Array.from(
-      root.querySelectorAll<HTMLElement>('[role="button"]'),
-    ).filter((el) =>
-      (el.textContent ?? "").toLowerCase().includes(keyword.toLowerCase()),
-    );
-    if (hits.length === 0) {
+    clearHits();
+
+    const cssHighlights = (
+      CSS as unknown as { highlights?: Map<string, unknown> }
+    ).highlights;
+    const RangeCtor = window.Range;
+    const HighlightCtor = (
+      window as unknown as { Highlight?: new (...r: Range[]) => unknown }
+    ).Highlight;
+
+    // Collect a Range per occurrence, walking all text nodes of the CV
+    const ranges: Range[] = [];
+    const kw = keyword.toLowerCase();
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let node = walker.nextNode();
+    while (node) {
+      const text = (node as Text).data.toLowerCase();
+      let from = 0;
+      let idx = text.indexOf(kw, from);
+      while (idx !== -1) {
+        const r = new RangeCtor();
+        r.setStart(node, idx);
+        r.setEnd(node, idx + kw.length);
+        ranges.push(r);
+        from = idx + kw.length;
+        idx = text.indexOf(kw, from);
+      }
+      node = walker.nextNode();
+    }
+
+    if (ranges.length === 0) {
       toast("Not on the CV (yet)", {
         description: `"${keyword}" appears nowhere in your CV text right now.`,
       });
       return;
     }
-    clearHits();
-    for (const el of hits) el.classList.add("kw-hit");
-    hits[0].scrollIntoView({ behavior: "smooth", block: "center" });
+
+    const first = ranges[0].startContainer.parentElement ??
+      (ranges[0].startContainer as Text).parentElement;
+    first?.scrollIntoView({ behavior: "smooth", block: "center" });
+
+    if (cssHighlights && HighlightCtor) {
+      const hl = new HighlightCtor(...ranges);
+      cssHighlights.set("kw", hl);
+    } else {
+      // Fallback: highlight the whole editable span (block level)
+      for (const r of ranges) {
+        const el = (r.startContainer as Text).parentElement;
+        if (el && !el.classList.contains("kw-hit")) el.classList.add("kw-hit");
+      }
+    }
     hitTimer.current = window.setTimeout(clearHits, 3000);
   }
 
