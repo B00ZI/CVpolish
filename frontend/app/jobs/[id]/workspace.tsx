@@ -31,8 +31,6 @@ interface AnalysisBlockProps {
   analysis: GapAnalysis;
   /** Required keywords present on the CV right now (live scan, 0 API). */
   matchedLive: string[];
-  /** Keywords accepted via "add anyway" — counted, no CV proof. */
-  claimed: string[];
   /** Required keywords absent from the CV. */
   missingLive: string[];
   /** Live match score (recomputed from the scan). */
@@ -41,7 +39,6 @@ interface AnalysisBlockProps {
   categories: { id: string; label: string }[];
   onQuickAdd: (kw: string, categoryId: string) => void;
   onNavigate: (targetId: string) => void;
-  onAddAnyway: (kw: string) => void;
   onHighlight: (keyword: string) => void;
   autofitting: boolean;
   onAutoFit: () => void;
@@ -96,26 +93,18 @@ export function Workspace({ jobId }: { jobId: string }) {
   }
 
   // ===== Live scan: every keyword (matched + missing) re-checked against
-  // the CV on each edit — both directions stay truthful. "Added anyway"
-  // keywords stay covered but show as claimed (no proof on the CV). =====
-  const [matchedLive, claimed, missingLive, score] = useMemo<
-    [string[], string[], string[], number]
-  >(() => {
-    if (!job?.analysis) return [[], [], [], 0];
+  // the CV on each edit — both directions stay truthful. No "add anyway":
+  // a keyword is missing until its text actually lives on the CV. =====
+  const [matchedLive, missingLive, score] = useMemo<[string[], string[], number]>(() => {
+    if (!job?.analysis) return [[], [], 0];
     const a = job.analysis;
     const text = cvText(profile);
     const onCv = (kw: string) => text.includes(kw.toLowerCase());
     const required = [...new Set([...a.matched, ...a.missing])];
     const inCv = required.filter(onCv);
-    const claimedNow = a.added.filter((kw) => !onCv(kw));
-    const gone = required.filter((kw) => !onCv(kw) && !a.added.includes(kw));
+    const gone = required.filter((kw) => !onCv(kw));
     const total = required.length || 1;
-    return [
-      inCv,
-      claimedNow,
-      gone,
-      Math.round(((inCv.length + claimedNow.length) / total) * 100),
-    ];
+    return [inCv, gone, Math.round((inCv.length / total) * 100)];
   }, [profile, job]);
 
   // Navigation targets in the CV (edits where keywords can land manually)
@@ -311,21 +300,12 @@ export function Workspace({ jobId }: { jobId: string }) {
               <AnalysisBlock
                 analysis={job.analysis}
                 matchedLive={matchedLive}
-                claimed={claimed}
                 missingLive={missingLive}
                 score={score}
                 targets={targets}
                 categories={categories}
                 onQuickAdd={quickAdd}
                 onNavigate={navigate}
-                onAddAnyway={(kw) =>
-                  mutate((j) => ({
-                    ...j,
-                    analysis: j.analysis
-                      ? { ...j.analysis, added: [...j.analysis.added, kw] }
-                      : j.analysis,
-                  }))
-                }
                 onHighlight={highlight}
                 autofitting={autofitting}
                 onAutoFit={autoFit}
@@ -392,14 +372,12 @@ export function Workspace({ jobId }: { jobId: string }) {
 function AnalysisBlock({
   analysis,
   matchedLive,
-  claimed,
   missingLive,
   score,
   targets,
   categories,
   onQuickAdd,
   onNavigate,
-  onAddAnyway,
   onHighlight,
   autofitting,
   onAutoFit,
@@ -422,8 +400,8 @@ function AnalysisBlock({
             />
           </div>
           <p className="mt-2 text-sm text-muted-foreground">
-            {matchedLive.length + claimed.length} covered ·{" "}
-            {missingLive.length} missing keywords
+            {matchedLive.length} covered · {missingLive.length} missing
+            keywords
           </p>
         </div>
       </div>
@@ -431,7 +409,7 @@ function AnalysisBlock({
       {/* Matched */}
       <section>
         <h2 className="text-base font-medium">You already have</h2>
-        {matchedLive.length + claimed.length === 0 ? (
+        {matchedLive.length === 0 ? (
           <p className="mt-1.5 text-sm text-muted-foreground">
             None of your keywords appear in this description — paste the full
             requirements section?
@@ -440,9 +418,6 @@ function AnalysisBlock({
           <div className="mt-3 flex flex-wrap gap-2">
             {matchedLive.map((kw) => (
               <MatchedChip key={kw} keyword={kw} onHighlight={onHighlight} />
-            ))}
-            {claimed.map((kw) => (
-              <ClaimedChip key={kw} keyword={kw} />
             ))}
           </div>
         )}
@@ -488,7 +463,6 @@ function AnalysisBlock({
                   categories={categories}
                   onQuickAdd={(catId) => onQuickAdd(kw, catId)}
                   onNavigate={(targetId) => onNavigate(targetId)}
-                  onAddAnyway={() => onAddAnyway(kw)}
                 />
               ))}
             </div>
@@ -520,20 +494,7 @@ function MatchedChip({
   );
 }
 
-/** Claimed chip — accepted via "add anyway", zero CV proof yet. */
-function ClaimedChip({ keyword }: { keyword: string }) {
-  return (
-    <span
-      title="Counted via 'add anyway' — no matching text on the CV"
-      className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-amber-300 py-1 pl-2.5 pr-3 text-sm text-amber-700 dark:border-amber-700 dark:text-amber-400"
-    >
-      <Check className="h-3 w-3" />
-      {keyword}
-    </span>
-  );
-}
-
-// ===== Missing keyword chip: quick add / navigate / add anyway =====
+// ===== Missing keyword chip: quick add to skills / navigate to edit =====
 
 function MissingChip({
   keyword,
@@ -541,14 +502,12 @@ function MissingChip({
   categories,
   onQuickAdd,
   onNavigate,
-  onAddAnyway,
 }: {
   keyword: string;
   targets: { id: string; label: string }[];
   categories: { id: string; label: string }[];
   onQuickAdd: (categoryId: string) => void;
   onNavigate: (targetId: string) => void;
-  onAddAnyway: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const close = () => setOpen(false);
@@ -612,22 +571,6 @@ function MissingChip({
             ))}
           </div>
         </div>
-
-        {/* 3 — Add anyway (or wait for the bulk AI auto-fit) */}
-        <Button
-          size="sm"
-          variant="ghost"
-          className="w-full justify-center"
-          onClick={() => {
-            onAddAnyway();
-            toast("Added anyway", {
-              description: `${keyword} is counted without full proof — try AI auto-fit for a natural sentence.`,
-            });
-            close();
-          }}
-        >
-          Add anyway without text
-        </Button>
       </PopoverContent>
     </Popover>
   );
