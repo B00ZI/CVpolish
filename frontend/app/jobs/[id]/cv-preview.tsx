@@ -200,9 +200,9 @@ export function CvPreview({
           )}
         </header>
 
-        {/* Summary */}
+        {/* Summary — navigation target for missing-keyword editing */}
         {profile.summary && (
-          <Section title={L.summary}>
+          <Section title={L.summary} targetId="summary">
             <p>
               <Editable
                 block
@@ -250,7 +250,7 @@ export function CvPreview({
           <Section title={L.experience}>
             <ul className="space-y-4">
               {profile.experience.map((exp) => (
-                <li key={exp.id}>
+                <li key={exp.id} data-cv-target={exp.id}>
                   <div className="flex items-baseline justify-between gap-4">
                     <p className="font-semibold">
                       {exp.jobTitle}
@@ -300,7 +300,7 @@ export function CvPreview({
           <Section title={L.projects}>
             <ul className="space-y-4">
               {profile.projects.map((prj) => (
-                <li key={prj.id}>
+                <li key={prj.id} data-cv-target={prj.id}>
                   <p className="font-semibold leading-snug">
                     {prj.name}
                     {prj.links.map((l) => (
@@ -501,13 +501,15 @@ export function CvPreview({
 
 function Section({
   title,
+  targetId,
   children,
 }: {
   title: string;
+  targetId?: string;
   children: React.ReactNode;
 }) {
   return (
-    <section className="mt-6">
+    <section className="mt-6" data-cv-target={targetId}>
       <h2 className="mb-2 border-b border-neutral-300 pb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-neutral-900">
         {title}
       </h2>

@@ -2,6 +2,7 @@ import type {
   AiIntelligence,
   GapAnalysis,
   Job,
+  Language,
   MasterProfile,
   RewriteDiff,
 } from "@/lib/types";
@@ -50,6 +51,46 @@ export function mockExtractIntelligence(p: MasterProfile): AiIntelligence {
     masterKeywords: list,
     baselineSummary: baseline,
     lastExtractedAt: new Date().toISOString(),
+  };
+}
+
+/** Bulk AI auto-fit.
+ *  Mock for the future POST /api/cv/integrate-missing: Gemini rewrites
+ *  relevant bullets so missing keywords land naturally in the CV.
+ *  Here: one tailored bullet per keyword, distributed over experiences. */
+export function mockAutoFit(
+  p: MasterProfile,
+  keywords: string[],
+  lang: Language,
+): MasterProfile {
+  const fr = lang === "fr";
+  const bulletFor = (kw: string) =>
+    fr
+      ? `Intégration de ${kw} en conditions de production, avec un suivi d'impact mesurable.`
+      : `Integrated ${kw} into production workflows, with measurable impact tracking.`;
+
+  if (p.experience.length === 0) {
+    // No experience to rewrite -> fall back to the skills db.
+    const next: MasterProfile = { ...p };
+    if (next.skillGroups.length > 0) {
+      next.skillGroups = next.skillGroups.map((g, i) =>
+        i === 0 ? { ...g, skills: [...g.skills, ...keywords] } : g,
+      );
+    }
+    return next;
+  }
+
+  return {
+    ...p,
+    experience: p.experience.map((e, i) => ({
+      ...e,
+      bullets: [
+        ...e.bullets,
+        ...keywords.filter((_, j) => j % p.experience.length === i).map(
+          (kw) => bulletFor(kw),
+        ),
+      ],
+    })),
   };
 }
 

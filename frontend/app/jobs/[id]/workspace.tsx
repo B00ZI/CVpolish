@@ -1,29 +1,54 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Check, Loader2, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "sonner";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { cn } from "@/lib/utils";
 import type { GapAnalysis, Job, MasterProfile } from "@/lib/types";
 import { getJob, upsertJob } from "@/lib/jobs-store";
 import { loadProfile, saveProfile } from "@/lib/profile-store";
-import { mockAnalyze, mockProfile, withDelay } from "@/mock";
+import { mockAnalyze, mockAutoFit, mockProfile, withDelay } from "@/mock";
 import { CvPreview } from "./cv-preview";
+
+/** All text that is actually rendered on the CV — the live scan runs on this. */
+function cvText(p: MasterProfile): string {
+  const parts = [p.contact.fullName, p.contact.targetTitle, p.summary];
+  for (const e of p.experience)
+    parts.push(e.jobTitle, e.company, e.location, e.bullets.join(" "));
+  for (const prj of p.projects)
+    parts.push(prj.name, prj.techStack.join(" "), prj.bullets.join(" "));
+  for (const g of p.skillGroups) parts.push(g.skills.join(" "));
+  parts.push(p.education.map((ed) => [ed.degree, ed.major, ed.university, ed.location].join(" ")).join(" "));
+  for (const cert of p.certifications) parts.push(cert.name, cert.issuer);
+  return parts.join(" ").toLowerCase();
+}
+
+interface AnalysisBlockProps {
+  analysis: GapAnalysis;
+  /** Missing keywords that now appear in the CV (live client scan, 0 API). */
+  matchedLive: string[];
+  /** Missing keywords still absent from the CV. */
+  missingLive: string[];
+  /** Live match score (recomputed from the scan). */
+  score: number;
+  targets: { id: string; label: string }[];
+  categories: { id: string; label: string }[];
+  onQuickAdd: (kw: string, categoryId: string) => void;
+  onNavigate: (targetId: string) => void;
+  onAddAnyway: (kw: string) => void;
+  autofitting: boolean;
+  onAutoFit: () => void;
+}
 
 export function Workspace({ jobId }: { jobId: string }) {
   const [job, setJob] = useState<Job | null | undefined>(undefined);
   const [profile, setProfile] = useState<MasterProfile>(mockProfile);
   const [analyzing, setAnalyzing] = useState(false);
+  const [autofitting, setAutofitting] = useState(false);
 
   useEffect(() => {
     const j = getJob(jobId);
@@ -40,6 +65,51 @@ export function Workspace({ jobId }: { jobId: string }) {
       return next;
     });
   }
+
+  /** Persist a profile edit (inline CV edits + quick add). */
+  function updateProfile(fn: (p: MasterProfile) => MasterProfile) {
+    if (!job) return;
+    const next = fn(profile);
+    setProfile(next);
+    saveProfile(next, job.language);
+  }
+
+  // ===== Live scan: missing keywords found in the CV flip to matched =====
+  const [matchedLive, missingLive, score] = useMemo<[string[], string[], number]>(() => {
+    if (!job?.analysis) return [[], [], 0];
+    const a = job.analysis;
+    const text = cvText(profile);
+    const present = (kw: string) =>
+      text.includes(kw.toLowerCase()) || a.added.includes(kw);
+    const doLive = a.missing.filter((kw) => present(kw));
+    const stillMissing = a.missing.filter((kw) => !present(kw));
+    const total = a.matched.length + a.missing.length || 1;
+    return [
+      doLive,
+      stillMissing,
+      Math.round(((a.matched.length + doLive.length) / total) * 100),
+    ];
+  }, [profile, job]);
+
+  // Navigation targets in the CV (edits where keywords can land manually)
+  const targets = useMemo<{ id: string; label: string }[]>(() => {
+    return [
+      { id: "summary", label: "Summary" },
+      ...profile.experience.map((e) => ({
+        id: e.id,
+        label: `${e.jobTitle || "Experience"}${e.company ? ` — ${e.company}` : ""}`,
+      })),
+      ...profile.projects.map((p) => ({
+        id: p.id,
+        label: `Project — ${p.name || "untitled"}`,
+      })),
+    ];
+  }, [profile]);
+
+  const categories = profile.skillGroups.map((g) => ({
+    id: g.id,
+    label: g.category,
+  }));
 
   if (job === undefined) {
     return (
@@ -71,6 +141,48 @@ export function Workspace({ jobId }: { jobId: string }) {
     await withDelay(null, 1200);
     mutate((j) => ({ ...j, analysis: mockAnalyze(j, profile) }));
     setAnalyzing(false);
+  }
+
+  /** Navigation: scroll the CV column to a section and open its editor. */
+  function navigate(targetId: string) {
+    const el = document.querySelector<HTMLElement>(
+      `[data-cv-target="${targetId}"]`,
+    );
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    openSoon(el);
+  }
+
+  function openSoon(el: HTMLElement) {
+    // two frames so the scroll settles before the editor opens
+    window.setTimeout(() => {
+      el.querySelector<HTMLElement>('[role="button"]')?.click();
+    }, 300);
+  }
+
+  /** Quick add: append a missing keyword to a skill category (0 tokens). */
+  function quickAdd(kw: string, categoryId: string) {
+    updateProfile((p) => ({
+      ...p,
+      skillGroups: p.skillGroups.map((g) =>
+        g.id === categoryId && !g.skills.includes(kw)
+          ? { ...g, skills: [...g.skills, kw] }
+          : g,
+      ),
+    }));
+  }
+
+  /** Bulk AI auto-fit: mock for POST /api/cv/integrate-missing. */
+  async function autoFit() {
+    if (autofitting || missingLive.length === 0) return;
+    setAutofitting(true);
+    const kws = missingLive;
+    await withDelay(null, 1800);
+    updateProfile((p) => mockAutoFit(p, kws, job!.language));
+    setAutofitting(false);
+    toast("AI auto-fit done", {
+      description: `${kws.length} keyword${kws.length > 1 ? "s" : ""} woven into your bullets (mock POST /api/cv/integrate-missing).`,
+    });
   }
 
   return (
@@ -108,17 +220,13 @@ export function Workspace({ jobId }: { jobId: string }) {
             {job.analysis ? (
               <AnalysisBlock
                 analysis={job.analysis}
-                onSaveNote={(kw, note) =>
-                  mutate((j) => ({
-                    ...j,
-                    analysis: j.analysis
-                      ? {
-                          ...j.analysis,
-                          notes: { ...j.analysis.notes, [kw]: note },
-                        }
-                      : j.analysis,
-                  }))
-                }
+                matchedLive={matchedLive}
+                missingLive={missingLive}
+                score={score}
+                targets={targets}
+                categories={categories}
+                onQuickAdd={quickAdd}
+                onNavigate={navigate}
                 onAddAnyway={(kw) =>
                   mutate((j) => ({
                     ...j,
@@ -127,6 +235,8 @@ export function Workspace({ jobId }: { jobId: string }) {
                       : j.analysis,
                   }))
                 }
+                autofitting={autofitting}
+                onAutoFit={autoFit}
               />
             ) : (
               <div className="rounded-xl border border-dashed border-border p-12 text-center">
@@ -150,7 +260,7 @@ export function Workspace({ jobId }: { jobId: string }) {
               </div>
             )}
 
-            {/* Notes for the AI */}
+            {/* Notes for the AI (legacy data still shows) */}
             {Object.entries(job.analysis?.notes ?? {}).length > 0 && (
               <section>
                 <h2 className="text-base font-medium">Context for the AI</h2>
@@ -176,11 +286,7 @@ export function Workspace({ jobId }: { jobId: string }) {
               profile={profile}
               job={job}
               onPrint={() => window.print()}
-              onEditProfile={(fn) => {
-                const next = fn(profile);
-                setProfile(next);
-                saveProfile(next, job.language);
-              }}
+              onEditProfile={updateProfile}
             />
           </div>
         </div>
@@ -189,24 +295,28 @@ export function Workspace({ jobId }: { jobId: string }) {
   );
 }
 
-// ===== Score + keyword chips (empty states included) =====
+// ===== Score + keyword chips with the 3 actions =====
 
 function AnalysisBlock({
   analysis,
-  onSaveNote,
+  matchedLive,
+  missingLive,
+  score,
+  targets,
+  categories,
+  onQuickAdd,
+  onNavigate,
   onAddAnyway,
-}: {
-  analysis: GapAnalysis;
-  onSaveNote: (keyword: string, note: string) => void;
-  onAddAnyway: (keyword: string) => void;
-}) {
+  autofitting,
+  onAutoFit,
+}: AnalysisBlockProps) {
   return (
     <>
-      {/* Score */}
+      {/* Score — updates live as keywords land in the CV */}
       <div className="flex items-center gap-6 rounded-xl border border-border p-6">
         <div className="text-center">
           <p className="text-4xl font-medium tabular-nums tracking-tight">
-            {analysis.score}%
+            {score}%
           </p>
           <p className="mt-0.5 text-xs text-muted-foreground">match</p>
         </div>
@@ -214,12 +324,12 @@ function AnalysisBlock({
           <div className="h-1.5 overflow-hidden rounded-full bg-muted">
             <div
               className="h-full rounded-full bg-foreground transition-all duration-500"
-              style={{ width: `${analysis.score}%` }}
+              style={{ width: `${score}%` }}
             />
           </div>
           <p className="mt-2 text-sm text-muted-foreground">
-            {analysis.matched.length} matched · {analysis.missing.length}{" "}
-            missing keywords
+            {analysis.matched.length + matchedLive.length} matched ·{" "}
+            {missingLive.length} missing keywords
           </p>
         </div>
       </div>
@@ -227,7 +337,7 @@ function AnalysisBlock({
       {/* Matched */}
       <section>
         <h2 className="text-base font-medium">You already have</h2>
-        {analysis.matched.length === 0 ? (
+        {analysis.matched.length + matchedLive.length === 0 ? (
           <p className="mt-1.5 text-sm text-muted-foreground">
             None of your keywords appear in this description — paste the full
             requirements section?
@@ -235,13 +345,10 @@ function AnalysisBlock({
         ) : (
           <div className="mt-3 flex flex-wrap gap-2">
             {analysis.matched.map((kw) => (
-              <span
-                key={kw}
-                className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 py-1 pl-2.5 pr-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300"
-              >
-                <Check className="h-3 w-3" />
-                {kw}
-              </span>
+              <MatchedChip key={kw} keyword={kw} />
+            ))}
+            {matchedLive.map((kw) => (
+              <MatchedChip key={kw} keyword={kw} />
             ))}
           </div>
         )}
@@ -249,8 +356,25 @@ function AnalysisBlock({
 
       {/* Missing */}
       <section>
-        <h2 className="text-base font-medium">Missing from your data</h2>
-        {analysis.missing.length === 0 ? (
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-base font-medium">Missing from your data</h2>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={autofitting || missingLive.length === 0}
+            onClick={onAutoFit}
+            title="AI weaves every missing keyword into your CV (1 API call)"
+          >
+            {autofitting ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Sparkles className="h-3.5 w-3.5 text-blue-600" />
+            )}
+            AI auto-fit
+          </Button>
+        </div>
+        {missingLive.length === 0 ? (
           <p className="mt-1.5 flex items-center gap-1.5 text-sm text-emerald-700 dark:text-emerald-400">
             <Check className="h-3.5 w-3.5" />
             You cover every keyword this job lists.
@@ -258,16 +382,18 @@ function AnalysisBlock({
         ) : (
           <>
             <p className="mt-1 text-sm text-muted-foreground">
-              Click a keyword: add context for the AI, or force it in.
+              Type it in the CV and it turns green on its own — or use one of
+              the actions below.
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
-              {analysis.missing.map((kw) => (
+              {missingLive.map((kw) => (
                 <MissingChip
                   key={kw}
                   keyword={kw}
-                  note={analysis.notes[kw]}
-                  added={analysis.added.includes(kw)}
-                  onSaveNote={(note) => onSaveNote(kw, note)}
+                  targets={targets}
+                  categories={categories}
+                  onQuickAdd={(catId) => onQuickAdd(kw, catId)}
+                  onNavigate={(targetId) => onNavigate(targetId)}
                   onAddAnyway={() => onAddAnyway(kw)}
                 />
               ))}
@@ -279,86 +405,110 @@ function AnalysisBlock({
   );
 }
 
-// ===== Missing keyword chip with note popover =====
+function MatchedChip({ keyword }: { keyword: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 py-1 pl-2.5 pr-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300">
+      <Check className="h-3 w-3" />
+      {keyword}
+    </span>
+  );
+}
+
+// ===== Missing keyword chip: quick add / navigate / add anyway =====
 
 function MissingChip({
   keyword,
-  note,
-  added,
-  onSaveNote,
+  targets,
+  categories,
+  onQuickAdd,
+  onNavigate,
   onAddAnyway,
 }: {
   keyword: string;
-  note?: string;
-  added: boolean;
-  onSaveNote: (note: string) => void;
+  targets: { id: string; label: string }[];
+  categories: { id: string; label: string }[];
+  onQuickAdd: (categoryId: string) => void;
+  onNavigate: (targetId: string) => void;
   onAddAnyway: () => void;
 }) {
-  const [draft, setDraft] = useState(note ?? "");
   const [open, setOpen] = useState(false);
+  const close = () => setOpen(false);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
           type="button"
-          className={cn(
-            "inline-flex items-center gap-1.5 rounded-full border py-1 pl-2.5 pr-3 text-sm transition-colors",
-            added
-              ? "border-border bg-muted/40 text-muted-foreground"
-              : "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300",
-          )}
+          className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 py-1 pl-2.5 pr-3 text-sm text-amber-800 transition-colors hover:bg-amber-100 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300"
         >
-          {added && <Check className="h-3 w-3" />}
           {keyword}
-          {!added && note && (
-            <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-          )}
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-80">
+      <PopoverContent align="start" className="w-96 space-y-4">
         <p className="text-sm font-medium">{keyword}</p>
-        {added ? (
-          <p className="text-xs text-muted-foreground">
-            Added anyway — the AI will try to include it.
+
+        {/* 1 — Quick add to skills (client-side, 0 tokens) */}
+        <div>
+          <p className="text-xs font-medium text-muted-foreground">
+            Quick add to skills
           </p>
-        ) : (
-          <>
-            <Textarea
-              rows={2}
-              value={draft}
-              placeholder="Context: where do you have this? (e.g. “used in my capstone”)"
-              onChange={(e) => setDraft(e.target.value)}
-            />
-            <div className="flex justify-end gap-2">
-              <Button
-                size="sm"
-                variant="ghost"
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {categories.map((c) => (
+              <button
+                key={c.id}
+                type="button"
                 onClick={() => {
-                  onAddAnyway();
-                  setOpen(false);
-                  toast("Added anyway", {
-                    description: `${keyword} will be pushed into the rewrite.`,
+                  onQuickAdd(c.id);
+                  toast("Added to skills", {
+                    description: `${keyword} → ${c.label}. It turns green in the CV instantly.`,
                   });
+                  close();
                 }}
+                className="rounded-md border border-border px-2 py-1 text-xs transition-colors hover:bg-muted"
               >
-                Add anyway
-              </Button>
-              <Button
-                size="sm"
+                {c.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 2 — Manual target navigation (client-side, 0 tokens) */}
+        <div>
+          <p className="text-xs font-medium text-muted-foreground">
+            Or edit a specific section manually
+          </p>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {targets.map((t) => (
+              <button
+                key={t.id}
+                type="button"
                 onClick={() => {
-                  onSaveNote(draft.trim());
-                  setOpen(false);
-                  toast("Note saved", {
-                    description: `The AI will use your context for ${keyword}.`,
-                  });
+                  onNavigate(t.id);
+                  close();
                 }}
+                className="max-w-full truncate rounded-md border border-border px-2 py-1 text-xs transition-colors hover:bg-muted"
               >
-                Save note
-              </Button>
-            </div>
-          </>
-        )}
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 3 — Add anyway (or wait for the bulk AI auto-fit) */}
+        <Button
+          size="sm"
+          variant="ghost"
+          className="w-full justify-center"
+          onClick={() => {
+            onAddAnyway();
+            toast("Added anyway", {
+              description: `${keyword} is counted without full proof — try AI auto-fit for a natural sentence.`,
+            });
+            close();
+          }}
+        >
+          Add anyway without text
+        </Button>
       </PopoverContent>
     </Popover>
   );

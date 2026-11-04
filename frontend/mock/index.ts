@@ -4,7 +4,7 @@
 
 export { mockProfile, mockProfileFr } from "./profile";
 export { mockJobs } from "./jobs";
-export { mockAnalyze, mockRewrites, mockExtractIntelligence } from "./generate";
+export { mockAnalyze, mockRewrites, mockExtractIntelligence, mockAutoFit } from "./generate";
 
 import type { Job } from "@/lib/types";
 import { mockJobs } from "./jobs";
