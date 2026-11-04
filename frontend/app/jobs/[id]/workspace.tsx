@@ -40,6 +40,7 @@ interface AnalysisBlockProps {
   onQuickAdd: (kw: string, categoryId: string) => void;
   onNavigate: (targetId: string) => void;
   onAddAnyway: (kw: string) => void;
+  onHighlight: (keyword: string) => void;
   autofitting: boolean;
   onAutoFit: () => void;
 }
@@ -153,6 +154,29 @@ export function Workspace({ jobId }: { jobId: string }) {
     openSoon(el);
   }
 
+  /** Flash every CV spot where a keyword appears (green-chip click). */
+  function highlight(keyword: string) {
+    const root = document.getElementById("cv-preview");
+    if (!root) return;
+    const hits = Array.from(
+      root.querySelectorAll<HTMLElement>('[role="button"]'),
+    ).filter((el) =>
+      (el.textContent ?? "").toLowerCase().includes(keyword.toLowerCase()),
+    );
+    if (hits.length === 0) {
+      toast("Not on the CV (yet)", {
+        description: `"${keyword}" appears nowhere in your CV text right now.`,
+      });
+      return;
+    }
+    for (const el of hits) {
+      el.classList.remove("kw-flash");
+      void el.offsetWidth; // restart the animation
+      el.classList.add("kw-flash");
+    }
+    hits[0].scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
   function openSoon(el: HTMLElement) {
     // two frames so the scroll settles before the editor opens
     window.setTimeout(() => {
@@ -235,6 +259,7 @@ export function Workspace({ jobId }: { jobId: string }) {
                       : j.analysis,
                   }))
                 }
+                onHighlight={highlight}
                 autofitting={autofitting}
                 onAutoFit={autoFit}
               />
@@ -307,6 +332,7 @@ function AnalysisBlock({
   onQuickAdd,
   onNavigate,
   onAddAnyway,
+  onHighlight,
   autofitting,
   onAutoFit,
 }: AnalysisBlockProps) {
@@ -345,10 +371,10 @@ function AnalysisBlock({
         ) : (
           <div className="mt-3 flex flex-wrap gap-2">
             {analysis.matched.map((kw) => (
-              <MatchedChip key={kw} keyword={kw} />
+              <MatchedChip key={kw} keyword={kw} onHighlight={onHighlight} />
             ))}
             {matchedLive.map((kw) => (
-              <MatchedChip key={kw} keyword={kw} />
+              <MatchedChip key={kw} keyword={kw} onHighlight={onHighlight} />
             ))}
           </div>
         )}
@@ -405,12 +431,24 @@ function AnalysisBlock({
   );
 }
 
-function MatchedChip({ keyword }: { keyword: string }) {
+/** Green chip — click flashes every CV spot where the keyword appears. */
+function MatchedChip({
+  keyword,
+  onHighlight,
+}: {
+  keyword: string;
+  onHighlight: (kw: string) => void;
+}) {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 py-1 pl-2.5 pr-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300">
+    <button
+      type="button"
+      onClick={() => onHighlight(keyword)}
+      title="Show on the CV"
+      className="cursor-pointer inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 py-1 pl-2.5 pr-3 text-sm text-emerald-800 transition-colors hover:bg-emerald-100 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300 dark:hover:bg-emerald-900"
+    >
       <Check className="h-3 w-3" />
       {keyword}
-    </span>
+    </button>
   );
 }
 
