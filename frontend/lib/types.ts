@@ -119,7 +119,7 @@ export interface Job {
   cv: MasterProfile;
   /** PDF filename override; falls back to a computed default when unset. */
   fileName?: string;
-  analysis: GapAnalysis | null;
+  analysis: GapAnalysis;       // always set — creation analyzes once, done
   rewrites: RewriteDiff[];     // filled after the AI rewrite step
   tailored: TailoredResult | null;  // filled when user accepts rewrites
 }

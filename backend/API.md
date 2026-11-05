@@ -154,9 +154,9 @@ type JobCard = {
   location?: string;
   language: Language;          // drives the EN/FR badge
   createdAt: string;
-  score: number | null;        // null when analysis was never run
-  matchedCount: number;        // analysis.matched.length (0 if no analysis)
-  missingCount: number;        // analysis.missing.length (0 if no analysis)
+  score: number;               // analysis.score (always present — see below)
+  matchedCount: number;        // analysis.matched.length
+  missingCount: number;        // analysis.missing.length
   fileName?: string;           // renamed filename, if any
 };
 ```
@@ -202,7 +202,7 @@ type Job = {
   createdAt: string;
   cv: MasterProfile;           // frozen at creation
   fileName?: string;
-  analysis: GapAnalysis | null;
+  analysis: GapAnalysis;       // always set — creation analyzes, done
   rewrites: [];                // legacy field, always empty, kept for compat
   tailored: null;              // legacy field, always null, kept for compat
 };
@@ -247,16 +247,11 @@ Called on workspace mount.
   `description`, `analysis`, the works)
 - Unknown id → `404 { "detail": "job not found" }`
 
-## `POST /api/jobs/{id}/analyze`
-
-"Analyze match" button (shown when `analysis` is `null` — e.g. legacy jobs).
-Recomputes the gap analysis against the job's **current frozen `cv`** and
-stores it back on the job. No body, no SQL — pure comparison, zero AI needed
-for the core path (same rules as `POST /api/jobs` step 3).
-
-- Request body: none
-- Response `200`: `{ "analysis": GapAnalysis }` — client merges that field
-  into its local job; backend persists it on the job row
+**The analysis always exists.** `POST /api/jobs` sets it at creation, so there
+is no "no analysis yet" state and no re-analyze endpoint — the analyze flow
+runs once per job, at creation. Legacy payloads without an `analysis`
+object: the backend should normalize them on read (or migrate), not expose
+an nullable `analysis` field.
 
 ## `PATCH /api/jobs/{id}`
 
@@ -346,10 +341,9 @@ spinner for the duration.
 | 5 | GET | `/api/jobs` | no |
 | 6 | POST | `/api/jobs` | optional (title detect / missing detect) |
 | 7 | GET | `/api/jobs/{id}` | no |
-| 8 | POST | `/api/jobs/{id}/analyze` | no |
-| 9 | PATCH | `/api/jobs/{id}` | no |
-| 10 | PUT | `/api/jobs/{id}/cv` | no |
-| 11 | POST | `/api/jobs/{id}/integrate-missing` | yes (fallback no-op) |
+| 8 | PATCH | `/api/jobs/{id}` | no |
+| 9 | PUT | `/api/jobs/{id}/cv` | no |
+| 10 | POST | `/api/jobs/{id}/integrate-missing` | yes (fallback no-op) |
 
-Ten of eleven work with zero AI — the app never requires a model to function.
-- Client behavior on `aiUsed: false`: show the result, never block, never 500
+Ten endpoints, nine of them work with zero AI — the app never requires a
+model to function.

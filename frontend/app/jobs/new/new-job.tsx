@@ -50,11 +50,10 @@ export function NewJob() {
       description,
       createdAt: new Date().toISOString(),
       cv: profile,
-      analysis: null,
+      analysis: mockAnalyze({ title, description }, profile),
       rewrites: [],
       tailored: null,
     };
-    job.analysis = mockAnalyze(job, profile);
     await withDelay(null, 1400);
     upsertJob(job);
     router.push(`/jobs/${job.id}`);

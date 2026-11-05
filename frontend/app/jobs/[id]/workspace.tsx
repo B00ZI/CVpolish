@@ -52,7 +52,6 @@ export function Workspace({ jobId }: { jobId: string }) {
   const [job, setJob] = useState<Job | null | undefined>(undefined);
   // profile === job.cv (the job's frozen CV) after load
   const [profile, setProfile] = useState<MasterProfile | null>(null);
-  const [analyzing, setAnalyzing] = useState(false);
   const [autofitting, setAutofitting] = useState(false);
   const hitTimer = useRef<number | null>(null);
 
@@ -80,17 +79,23 @@ export function Workspace({ jobId }: { jobId: string }) {
       setProfile(null);
       return;
     }
-    // One-time migration: old jobs have no frozen CV yet — snapshot the
-    // current profile so existing edits are preserved, then work on it.
-    if (!j.cv) {
-      const next: Job = { ...j, cv: loadProfile(j.language) };
-      upsertJob(next);
-      setJob(next);
-      setProfile(next.cv);
-    } else {
-      setJob(j);
-      setProfile(j.cv);
-    }
+  // One-time migration: old jobs may have no frozen CV and/or no analysis —
+  // snapshot the profile / compute the analysis so everything is present,
+  // then work on it.
+  if (!j.cv || !j.analysis) {
+    const profile = j.cv ?? loadProfile(j.language);
+    const next: Job = {
+      ...j,
+      cv: profile,
+      analysis: j.analysis ?? mockAnalyze(j, profile),
+    };
+    upsertJob(next);
+    setJob(next);
+    setProfile(next.cv);
+  } else {
+    setJob(j);
+    setProfile(j.cv);
+  }
   }, [jobId]);
 
   function mutate(fn: (j: Job) => Job) {
@@ -121,7 +126,7 @@ export function Workspace({ jobId }: { jobId: string }) {
   // the CV on each edit — both directions stay truthful. No "add anyway":
   // a keyword is missing until its text actually lives on the CV. =====
   const [matchedLive, missingLive, score] = useMemo<[string[], string[], number]>(() => {
-    if (!job?.analysis || !profile) return [[], [], 0];
+    if (!job || !profile) return [[], [], 0];
     const a = job.analysis;
     const text = cvText(profile);
     const onCv = (kw: string) => text.includes(kw.toLowerCase());
@@ -184,14 +189,6 @@ export function Workspace({ jobId }: { jobId: string }) {
         Loading…
       </div>
     );
-  }
-
-  async function analyzeNow() {
-    if (analyzing || !profile) return;
-    setAnalyzing(true);
-    await withDelay(null, 1200);
-    mutate((j) => ({ ...j, analysis: mockAnalyze(j, profile) }));
-    setAnalyzing(false);
   }
 
   /** Navigation: amber-highlight a section in the CV and scroll to it.
@@ -352,27 +349,7 @@ export function Workspace({ jobId }: { jobId: string }) {
                   autofitting={autofitting}
                   onAutoFit={autoFit}
                 />
-              ) : (
-                <div className="rounded-xl border border-dashed border-border p-12 text-center">
-                  <h2 className="text-base font-medium">No analysis yet</h2>
-                  <p className="mx-auto mt-1.5 max-w-md text-sm text-muted-foreground">
-                    Compare this job description against your profile to see
-                    the match score and missing keywords.
-                  </p>
-                  <Button
-                    className="mt-5"
-                    onClick={analyzeNow}
-                    disabled={analyzing}
-                  >
-                    {analyzing ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Sparkles className="h-4 w-4 text-blue-600" />
-                    )}
-                    {analyzing ? "Analyzing…" : "Analyze match"}
-                  </Button>
-                </div>
-              )}
+              ) : null}
             </div>
 
             {/* Always-visible finish bar */}
