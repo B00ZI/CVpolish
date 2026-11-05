@@ -21,12 +21,6 @@ import { loadProfile } from "@/lib/profile-store";
 import { loadJobs } from "@/lib/jobs-store";
 import { mockJobs, mockProfile } from "@/mock";
 
-const STATUS_LABEL: Record<Job["status"], string> = {
-  draft: "Draft",
-  analyzed: "Rewrite pending",
-  tailed: "Ready to print",
-};
-
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", {
     month: "short",
@@ -180,15 +174,6 @@ export function Home() {
                       className="px-1.5 text-[11px] text-muted-foreground"
                     >
                       {job.language === "fr" ? "FR" : "EN"}
-                    </Badge>
-                    <Badge
-                      variant="secondary"
-                      className={cn(
-                        job.status === "tailed" &&
-                          "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-400",
-                      )}
-                    >
-                      {STATUS_LABEL[job.status]}
                     </Badge>
                   </div>
                 </div>

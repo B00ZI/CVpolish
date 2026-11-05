@@ -83,8 +83,6 @@ export interface MasterProfile {
 
 // ===== Job pipeline =====
 
-export type JobStatus = "draft" | "analyzed" | "tailed";
-
 export interface GapAnalysis {
   score: number;                     // match % (matched / total * 100)
   matched: string[];                 // keywords you already have
@@ -117,7 +115,6 @@ export interface Job {
   location?: string;
   description: string;         // raw pasted job description
   createdAt: string;           // ISO date
-  status: JobStatus;
   /** Full frozen CV at creation — AI edits live here, not in the profile. */
   cv: MasterProfile;
   /** PDF filename override; falls back to a computed default when unset. */

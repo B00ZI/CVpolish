@@ -49,7 +49,6 @@ export function NewJob() {
       company: "",
       description,
       createdAt: new Date().toISOString(),
-      status: "analyzed",
       cv: profile,
       analysis: null,
       rewrites: [],

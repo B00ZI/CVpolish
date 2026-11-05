@@ -43,7 +43,6 @@ export const mockJobs: Job[] = [
     location: "Remote",
     description: northboundJd,
     createdAt: "2026-10-27T09:30:00.000Z",
-    status: "analyzed",
     cv: mockProfile,
     analysis: {
       score: 76,
@@ -131,7 +130,6 @@ export const mockJobs: Job[] = [
     location: "Casablanca, Maroc (hybride)",
     description: medilinkJd,
     createdAt: "2026-10-24T14:00:00.000Z",
-    status: "tailed",
     cv: mockProfileFr,
     analysis: {
       score: 91,
