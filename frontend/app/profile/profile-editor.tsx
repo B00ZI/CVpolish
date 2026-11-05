@@ -38,7 +38,6 @@ export function ProfileEditor() {
   const [lang, setLang] = useState<Language>("en");
   const [profile, setProfile] = useState<MasterProfile>(mockProfile);
   const [active, setActive] = useState<string>("contact");
-  const [saveState, setSaveState] = useState<"saved" | "saving">("saved");
   const [aiBusy, setAiBusy] = useState<string | null>(null);
   const loaded = useRef(false);
   const firstSave = useRef(true);
@@ -57,10 +56,8 @@ export function ProfileEditor() {
       firstSave.current = false;
       return;
     }
-    setSaveState("saving");
     const t = setTimeout(() => {
       saveProfile(profile, lang);
-      setSaveState("saved");
     }, 500);
     return () => clearTimeout(t);
   }, [profile, lang]);
@@ -146,15 +143,6 @@ export function ProfileEditor() {
                 </button>
               ))}
             </div>
-            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <span
-                className={cn(
-                  "h-1.5 w-1.5 rounded-full",
-                  saveState === "saved" ? "bg-emerald-500" : "bg-amber-500",
-                )}
-              />
-              {saveState === "saved" ? "Saved" : "Saving…"}
-            </span>
             <Button variant="ghost" size="sm" className="text-xs" onClick={reset}>
               Reset data
             </Button>

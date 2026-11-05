@@ -3,28 +3,19 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { cn } from "@/lib/utils";
 
-/** Shared app top bar — identical height, spacing and width on every page
- *  so navigating never feels like the content jumps around. Small pages use
- *  the default 5xl belt; the wide workspace passes `wide`. */
+/** Shared app top bar — identical height, spacing and belt width on every
+ *  page so navigating never makes the content jump around horizontally. */
 export function TopBar({
   left,
   right,
-  wide = false,
 }: {
   left: React.ReactNode;
   right?: React.ReactNode;
-  wide?: boolean;
 }) {
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur print:hidden">
-      <div
-        className={cn(
-          "mx-auto flex h-14 items-center justify-between gap-4 px-6",
-          wide ? "max-w-[1600px]" : "max-w-5xl",
-        )}
-      >
+      <div className="mx-auto flex h-14 max-w-[1600px] items-center justify-between gap-4 px-6">
         <div className="flex min-w-0 items-center gap-4">{left}</div>
         <div className="flex shrink-0 items-center gap-3">
           {right ?? <ThemeToggle />}

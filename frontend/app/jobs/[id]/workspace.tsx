@@ -3,15 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Check, FileText, Loader2, Printer, Sparkles } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -62,7 +54,6 @@ export function Workspace({ jobId }: { jobId: string }) {
   const [profile, setProfile] = useState<MasterProfile | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [autofitting, setAutofitting] = useState(false);
-  const [jobDetailsOpen, setJobDetailsOpen] = useState(false);
   const hitTimer = useRef<number | null>(null);
 
   useEffect(() => {
@@ -323,34 +314,21 @@ export function Workspace({ jobId }: { jobId: string }) {
     <div className="min-h-screen print:min-h-0 lg:flex lg:h-screen lg:flex-col lg:overflow-hidden print:h-auto print:overflow-visible">
       {/* Top bar: back link · job title (opens details) · PDF file chip */}
       <TopBar
-        wide
         left={
           <>
             <BackLink href="/">Your CVs</BackLink>
             <span aria-hidden className="block h-4 w-px bg-border" />
-            <button
-              type="button"
-              onClick={() => setJobDetailsOpen(true)}
-              title="Show the original job description"
-              className="min-w-0 truncate text-sm font-medium text-foreground/90 underline-offset-4 transition-colors hover:underline"
-            >
-              {job.title}
-              {job.company ? ` @ ${job.company}` : ""}
-            </button>
+            <JobTitlePopover
+              job={job}
+              onSave={(title) => mutate((j) => ({ ...j, title }))}
+            />
             <FileChip
               job={job}
               onSave={(name) => mutate((j) => ({ ...j, fileName: name }))}
             />
           </>
         }
-        right={
-          <>
-            <Badge variant="secondary">
-              {job.status === "tailed" ? "Ready to print" : "In progress"}
-            </Badge>
-            <ThemeToggle />
-          </>
-        }
+        right={<ThemeToggle />}
       />
 
       {/* Single view: two independent panes on desktop — the left panel
@@ -419,15 +397,75 @@ export function Workspace({ jobId }: { jobId: string }) {
           </div>
         </div>
       </main>
-
-      {/* Click the job title: rename it / revisit the original posting */}
-      <JobDetailsDialog
-        job={job}
-        open={jobDetailsOpen}
-        onOpenChange={setJobDetailsOpen}
-        onSave={(title) => mutate((j) => ({ ...j, title }))}
-      />
     </div>
+  );
+}
+
+/** Small popover next to the job title (same feel as the missing-keyword
+ *  popover): rename the job — it's the navigation name on home cards — and
+ *  re-read the original pasted posting. */
+function JobTitlePopover({
+  job,
+  onSave,
+}: {
+  job: Job;
+  onSave: (title: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(job.title);
+
+  // Re-sync the draft whenever the popover opens
+  useEffect(() => {
+    if (open) setDraft(job.title);
+  }, [open, job.title]);
+
+  function commit() {
+    const v = draft.trim();
+    if (v && v !== job.title) onSave(v);
+    setOpen(false);
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          title="Job title and original posting"
+          className="min-w-0 truncate text-sm font-medium text-foreground/90 underline-offset-4 hover:underline"
+        >
+          {job.title}
+          {job.company ? ` @ ${job.company}` : ""}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-[420px] space-y-3">
+        <div>
+          <Label htmlFor="job-title-input">Job title</Label>
+          <Input
+            id="job-title-input"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                commit();
+              }
+            }}
+            className="mt-1.5"
+          />
+        </div>
+        <div>
+          <p className="text-xs font-medium text-muted-foreground">
+            Original job description
+          </p>
+          <div className="cv-scroll mt-1.5 max-h-56 overflow-y-auto whitespace-pre-wrap rounded-md border border-border bg-muted/30 p-2.5 text-xs leading-relaxed">
+            {job.description}
+          </div>
+        </div>
+        <Button size="sm" className="w-full" disabled={!draft.trim()} onClick={commit}>
+          Save title
+        </Button>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -478,78 +516,11 @@ function FileChip({
         setDraft(fileName);
         setEditing(true);
       }}
-      className="hidden max-w-64 items-center gap-1.5 truncate rounded-md border border-border bg-muted/40 px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground sm:flex"
+      className="hidden shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-muted/40 px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground sm:flex"
     >
       <FileText className="h-3 w-3 shrink-0" />
-      <span className="truncate">{fileName}</span>
+      {fileName}
     </button>
-  );
-}
-
-/** Click the job title: rename (it's the navigation name on home cards) and
- *  the small dialog shows the original pasted posting for reference. */
-function JobDetailsDialog({
-  job,
-  open,
-  onOpenChange,
-  onSave,
-}: {
-  job: Job;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onSave: (title: string) => void;
-}) {
-  const [draft, setDraft] = useState(job.title);
-
-  // Re-sync the draft every time the dialog opens
-  useEffect(() => {
-    if (open) setDraft(job.title);
-  }, [open, job.title]);
-
-  function commit() {
-    const v = draft.trim();
-    if (v && v !== job.title) onSave(v);
-    onOpenChange(false);
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl">
-        <DialogHeader>
-          <DialogTitle>This job</DialogTitle>
-          <DialogDescription>
-            Title, company and language stay with the CV — the posting below is
-            here whenever you need to check it again.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4">
-          <div>
-            <Label htmlFor="job-title-input">Job title</Label>
-            <Input
-              id="job-title-input"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  commit();
-                }
-              }}
-              className="mt-1.5"
-            />
-          </div>
-          <div>
-            <p className="text-sm font-medium">Original job description</p>
-            <div className="cv-scroll mt-1.5 max-h-64 overflow-y-auto whitespace-pre-wrap rounded-md border border-border bg-muted/30 p-3 text-xs leading-relaxed">
-              {job.description}
-            </div>
-          </div>
-        </div>
-        <Button className="w-full" disabled={!draft.trim()} onClick={commit}>
-          Save
-        </Button>
-      </DialogContent>
-    </Dialog>
   );
 }
 
