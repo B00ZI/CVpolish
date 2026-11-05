@@ -8,17 +8,27 @@ import {
   ArrowRight,
   Check,
   Plus,
+  Trash2,
   TriangleAlert,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import type { Job, MasterProfile } from "@/lib/types";
 import { profileCompleteness } from "@/lib/completeness";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { TopBar } from "@/components/top-bar";
 import { loadProfile } from "@/lib/profile-store";
-import { loadJobs } from "@/lib/jobs-store";
+import { deleteJob, loadJobs } from "@/lib/jobs-store";
 import { mockJobs, mockProfile } from "@/mock";
 
 function formatDate(iso: string): string {
@@ -32,6 +42,7 @@ function formatDate(iso: string): string {
 export function Home() {
   const [profile, setProfile] = useState<MasterProfile>(mockProfile);
   const [jobs, setJobs] = useState<Job[]>(mockJobs);
+  const [deleteTarget, setDeleteTarget] = useState<Job | null>(null);
 
   // Load saved profile + jobs after mount (avoids hydration mismatch).
   useEffect(() => {
@@ -40,6 +51,16 @@ export function Home() {
   }, []);
 
   const completeness = profileCompleteness(profile);
+
+  function confirmDelete() {
+    if (!deleteTarget) return;
+    deleteJob(deleteTarget.id);
+    setJobs((prev) => prev.filter((j) => j.id !== deleteTarget.id));
+    toast("CV deleted", {
+      description: `"${deleteTarget.title}" was removed.`,
+    });
+    setDeleteTarget(null);
+  }
 
   return (
     <div className="min-h-screen">
@@ -128,13 +149,19 @@ export function Home() {
         ) : (
           <section className="mt-6 grid gap-4 sm:grid-cols-2">
             {jobs.map((job) => (
-              <Link
+              <div
                 key={job.id}
-                href={`/jobs/${job.id}`}
-                className="group rounded-xl border border-border p-5 transition-colors hover:border-foreground/25 hover:bg-muted/30"
+                className="group relative rounded-xl border border-border p-5 transition-colors hover:border-foreground/25 hover:bg-muted/30"
               >
+                {/* Transparent overlay link: the WHOLE card opens the CV,
+                    while the delete button stays a real, separate button. */}
+                <Link
+                  href={`/jobs/${job.id}`}
+                  className="absolute inset-0 z-10 rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  aria-label={`Open "${job.title}"`}
+                />
                 <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0">
+                  <div className="min-w-0 pr-6">
                     <p className="truncate text-[15px] font-medium">
                       {job.title}
                     </p>
@@ -168,20 +195,55 @@ export function Home() {
                   <span className="text-xs text-muted-foreground">
                     {formatDate(job.createdAt)}
                   </span>
-                  <div className="flex items-center gap-1.5">
+                  <div className="relative flex items-center gap-1.5">
                     <Badge
                       variant="outline"
                       className="px-1.5 text-[11px] text-muted-foreground"
                     >
                       {job.language === "fr" ? "FR" : "EN"}
                     </Badge>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="relative z-20 h-7 w-7 text-muted-foreground/60 transition-colors hover:text-destructive"
+                      onClick={() => setDeleteTarget(job)}
+                      aria-label={`Delete "${job.title}"`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
                   </div>
                 </div>
-              </Link>
+              </div>
             ))}
           </section>
         )}
       </main>
+
+      {/* Delete confirmation */}
+      <Dialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete this CV?</DialogTitle>
+            <DialogDescription>
+              &quot;{deleteTarget?.title}&quot; and its saved tailoring (score,
+              CV edits, filename) will be removed for good.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)}>
+              Keep it
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete}>
+              Delete CV
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -5,6 +5,7 @@ import type { Job } from "./types";
 import { mockJobs } from "@/mock";
 
 export const JOBS_KEY = "cvpolish.jobs.v1";
+const DELETED_KEY = "cvpolish.jobs.deleted.v1";
 
 function readSaved(): Job[] {
   try {
@@ -23,13 +24,27 @@ function writeSaved(jobs: Job[]): void {
   }
 }
 
+/** Ids of mock jobs the user deleted — keeps deletions real across reloads
+ *  during the mock phase (mocks can't be removed from the hardcoded array). */
+function readTombstones(): string[] {
+  try {
+    const raw = localStorage.getItem(DELETED_KEY);
+    return raw ? (JSON.parse(raw) as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
 export function loadJobs(): Job[] {
   if (typeof window === "undefined") return mockJobs;
   const saved = readSaved();
   const savedIds = new Set(saved.map((j) => j.id));
+  const deleted = new Set(readTombstones());
   const all = [...saved, ...mockJobs.filter((m) => !savedIds.has(m.id))];
   // Jobs saved before the language field existed default to English.
-  return all.map((j) => ({ ...j, language: j.language ?? "en" }));
+  return all
+    .filter((j) => !deleted.has(j.id))
+    .map((j) => ({ ...j, language: j.language ?? "en" }));
 }
 
 export function getJob(id: string): Job | undefined {
@@ -39,4 +54,16 @@ export function getJob(id: string): Job | undefined {
 /** Create or update one job (only that job gets persisted). */
 export function upsertJob(job: Job): void {
   writeSaved([job, ...readSaved().filter((j) => j.id !== job.id)]);
+}
+
+/** Remove one job for good. Mock jobs get tombstoned so they stay gone. */
+export function deleteJob(id: string): void {
+  const deleted = readTombstones();
+  if (!deleted.includes(id)) deleted.push(id);
+  try {
+    localStorage.setItem(DELETED_KEY, JSON.stringify(deleted));
+  } catch {
+    // storage blocked -> in-session list still drops it
+  }
+  writeSaved(readSaved().filter((j) => j.id !== id));
 }

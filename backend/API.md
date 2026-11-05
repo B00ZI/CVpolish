@@ -5,7 +5,8 @@ backend you are going to build. Shapes match `frontend/lib/types.ts` 1:1, so
 the swap from mock data to real fetches is mechanical.
 
 Build it in this order: **Profile first, then Jobs, then the two AI calls.**
-Ten of the ten endpoints… read the table at the end — only 2 of 10 touch AI.
+Eleven endpoints — read the table at the end: only #4 and #11 touch AI,
+the other nine work with zero AI calls.
 
 ---
 
@@ -320,6 +321,15 @@ type JobCard = {
 - Response `201`: the **full `Job`** (types above).
 - Works with zero AI (plain substring analysis).
 
+#### `DELETE /api/jobs/{id}`
+- **Where/why:** the trash icon on a home card, after the user confirms in
+  the UI dialog. Deletes the whole job row — its `cv` and `analysis` live in
+  the row, so nothing else to clean up.
+- Request body: none.
+- Response: `204 No Content` (the client drops the card from its list).
+- Unknown id → `404`. Idempotent: deleting an already-deleted id is also
+  `404` — the UI never repeats the call anyway.
+
 ### Page 3 — Workspace (`/jobs/{id}`)
 
 #### `GET /api/jobs/{id}`
@@ -411,16 +421,17 @@ spinners — only the storage behind them changes.
 | 7 | GET | `/api/jobs/{id}` | no | Workspace |
 | 8 | PATCH | `/api/jobs/{id}` | no | Workspace |
 | 9 | PUT | `/api/jobs/{id}/cv` | no | Workspace |
-| 10 | POST | `/api/jobs/{id}/integrate-missing` | **yes** (fallback no-op) | Workspace |
+| 10 | DELETE | `/api/jobs/{id}` | no | Home |
+| 11 | POST | `/api/jobs/{id}/integrate-missing` | **yes** (fallback no-op) | Workspace |
 
 1. `profiles` table + `GET`/`PUT /api/profile/{lang}` — no AI, easier to test
    straight in the browser
 2. `jobs` table + `POST /api/jobs` + `GET /api/jobs` + `GET /api/jobs/{id}`
 3. `PATCH /api/jobs/{id}` + `PUT /api/jobs/{id}/cv` (autosave lives here)
-4. `DELETE /api/profile/{lang}` (trivial)
+4. `DELETE /api/profile/{lang}` + `DELETE /api/jobs/{id}` (trivial)
 5. AI calls last, each wired to Gemini free tier with its fallback behavior:
-   extract-intelligence → integrate-missing
+   extract-intelligence (#4) → integrate-missing (#11)
 
-Ten endpoints total. Eight work with zero AI. Only #4 (extract-intelligence)
-and #10 (integrate-missing) call a model — both with explicit `aiUsed`
+Eleven endpoints total. Nine work with zero AI. Only #4 (extract-intelligence)
+and #11 (integrate-missing) call a model — both with explicit `aiUsed`
 fallbacks so the app never requires one.
