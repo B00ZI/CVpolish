@@ -1,22 +1,141 @@
-# CVPolish API contract
+# CVPolish — Backend build guide (API)
 
-The frontend is the source of truth for shapes: every type here matches
-`frontend/lib/types.ts` 1:1 so the localStorage → fetch swap is mechanical.
-This doc is the spec for building the FastAPI backend — one page at a time.
+This is the contract between the frontend (already built, mock-phase) and the
+backend you are going to build. Shapes match `frontend/lib/types.ts` 1:1, so
+the swap from mock data to real fetches is mechanical.
 
-## Conventions
-- Base path `/api`, JSON bodies only, ISO 8601 date strings
-- No auth (personal tool, single user)
-- All `id` strings are client-generated (`sg-*`, `exp-*`, `prj-*`, `edu-*`,
-  `cert-*`, `job-*`) — the backend treats them as opaque and preserves them
-- **AI endpoints never fail**: no key / quota / timeout → `200` with
-  `aiUsed: false` + a non-AI fallback result. Never a 500. Core features
-  must work with zero AI calls
-- Languages: `lang` param is `"en" | "fr"` — two independent profile dbs
+Build it in this order: **Profile first, then Jobs, then the two AI calls.**
+Ten of the ten endpoints… read the table at the end — only 2 of 10 touch AI.
 
-## Shared types (backend response/request payloads)
+---
+
+## 1. The mental model — data lives in ONE place: the database
+
+The frontend is just views. It holds no second copy of the truth:
+
+- The **DB** (Postgres) is the only source of truth for profiles and jobs.
+- The frontend **reads on mount** (`GET`) and **writes on action** (`PUT`/`POST`).
+- There is no polling, no websockets, no sync. Single user, so **last write
+  wins** — no conflict handling needed.
+- React state is a working mirror of what you just read/wrote. On every edit
+  the UI updates its state instantly (so typing feels live) and persists
+  in the background.
+
+### What localStorage is today, and what happens to it
+
+Right now the "database" is fake: `localStorage` stores profiles and jobs
+(keys `cvpolish.profile.v1`, `cvpolish.profile.fr.v1`, `cvpolish.jobs.v1`).
+That exists only because there was no backend yet — so the UI could still
+save edits across reloads.
+
+**After the swap, localStorage is not needed at all for app data.** The
+browser's localStorage is deleted on "Clear site data", shared across
+incognito tabs badly, and can't be reached from the DB — so the real backend
+replaces it completely:
+
+| Stored in localStorage today | Becomes with the backend |
+|---|---|
+| `cvpolish.profile.v1` (EN profile) | DB row `profiles(en)` via `GET/PUT` |
+| `cvpolish.profile.fr.v1` (FR profile) | DB row `profiles(fr)` |
+| `cvpolish.jobs.v1` (all saved jobs) | DB rows in `jobs` via the job endpoints |
+| `aiIntelligence` migration flags | DB column inside the profile JSON |
+| `cvpolish.theme` (dark/light) | **stays** — UI preference, not app data, no backend wanted |
+
+So: you need no "sync" endpoint, no export/import. The frontend will simply
+fetch on load instead of reading localStorage.
+
+### The three write patterns (only these, nothing fancier)
+
+1. **Debounced full-replace autosave.** Typing/editing fires `PUT` with the
+   whole document 500 ms after the last keystroke. Why full replace?
+   One editor section edits one deep slice of the data; per-field patching
+   is opinionated and not worth it for a personal tool. Why debounce?
+   It turns hundreds of keystrokes into ~one request per edit burst.
+2. **Explicit user action → one request.** Buttons like "Reset", "Save &
+   extract", "Analyze" call the endpoint once, the response replaces state.
+3. **AI action → request that both mutates and returns.** The AI endpoints
+   change the saved data server-side and give the result back; the client
+   drops its local copy and adopts the response (no optimistic guesswork).
+
+---
+
+## 2. User journey flows — what actually happens
+
+### A. Profile page `/profile`
+1. User opens `/profile` with language `en` → `GET /api/profile/en` → first
+   time ever this returns an **empty structure** (no seed data) → UI shows
+   8 empty editable sections
+2. User types → React state updates live → after 500 ms idle →
+   `PUT /api/profile/en` (whole `MasterProfile`)
+3. Switch language to `fr` (UI flushes pending edits first, then) →
+   `GET /api/profile/fr` → an independent FR profile
+4. "Save & extract" → `POST /api/profile/en/extract-intelligence` →
+   keywords + baseline summary saved by the server → result renders
+5. "Reset data" (confirm) → `DELETE /api/profile/fr` → empty structure back
+
+> Home's completeness bar is computed in the browser from this same profile —
+> it needs no extra endpoint.
+
+### B. New CV `/jobs/new`
+1. User picks language (EN/FR cards), pastes the full job description
+2. "Analyze" → `POST /api/jobs` `{language, description}` → backend:
+   - copies `profiles[language]` into `job.cv` **at creation** — this copy is
+     the CV that will be tailor for this job only. Profile edits later never
+     touch it. All AI results and manual edits land here from now on
+   - reads the title from the first non-empty JD line
+   - compares the JD text against `job.cv.aiIntelligence.masterKeywords`
+   - saves the job and returns it **complete**, analysis already set
+3. Frontend takes the returned `id` and navigates to `/jobs/{id}`
+
+### C. Workspace `/jobs/{id}` — view, edit, print
+1. Mount → `GET /api/jobs/{id}` → everything needed renders: left panel =
+   analysis + missing keywords, right = the live A4 CV (`job.cv`)
+2. Green/amber flips and the score: 100% frontend. The text of the CV is
+   scanned locally for the keywords — **no backend involvement on edits**
+3. Quick-add a chip / add a bullet / rename title or filename →
+   `PATCH /api/jobs/{id}` (title/filename) or `PUT /api/jobs/{id}/cv`
+   (any CV edit, debounced)
+4. "Ask AI" (explicit button): `POST /api/jobs/{id}/integrate-missing`
+   sends the missing keywords + the user's per-keyword instructions →
+   the server weaves them into bullets of `job.cv`, **saves it** and returns
+   the updated CV → client adopts it
+5. Print: browser only (`window.print()`, filename via `document.title`)
+   → **no endpoint at all**
+
+### D. Home `/`
+1. Mount → `GET /api/jobs` → light card list (no CV payloads)
+2. Card → `/jobs/{id}` → `GET /api/jobs/{id}` (C above)
+
+---
+
+## 3. Conventions (read before coding)
+
+- Base path `/api`. JSON bodies only. ISO 8601 datetimes.
+- **No auth.** Personal tool, one user, the only consumer is the frontend
+  at `http://localhost:3000` (CORS is already configured in `main.py`).
+- **Languages** `lang` = `"en" | "fr"` — two fully independent profiles.
+- **Ids are client-generated** (`job-*`, `sg-*`, `exp-*`, `prj-*`, `edu-*`,
+  `cert-*`). The backend treats them as opaque strings. Why? The UI needs the
+  id the moment it creates a row (to scroll/highlight/target it), so waiting
+  for the server to mint one would add latency for no gain.
+- **`updatedAt` is informational.** The client already holds correct state
+  after a write; it stores but never reads the server's timestamps.
+- **Errors must be plain.** `{ "detail": "..." }` in the body (already the
+  FastAPI default). The UI surfaces them as a toast and keeps its local
+  state — a failed save quietly retries on the next edit.
+- **AI endpoints never fail** — hard rule of this project:
+  no API key / quota exhausted / slow model → still `200`, with
+  `aiUsed: false` and a **useful non-AI result** (or an unchanged result for
+  integrate-missing). Never a 500. Ten of ten endpoints must work with the
+  key missing.
+
+---
+
+## 4. Shared types
 
 ```ts
+type Language = "en" | "fr";
+
 type Contact = {
   fullName: string; targetTitle: string; phone: string; email: string; city: string;
   github?: string; linkedin?: string; portfolio?: string;
@@ -26,9 +145,9 @@ type SkillGroup = { id: string; category: string; skills: string[] };
 
 type Experience = {
   id: string; jobTitle: string; company: string; location: string;
-  startDate: string;              // "Feb 2023" — plain text, backend stores as-is
-  endDate: string | null;         // null = Present
-  bullets: string[];              // may contain "" (renders as placeholder)
+  startDate: string;               // "Feb 2023" — plain text, stored as-is
+  endDate: string | null;          // null = Present
+  bullets: string[];               // may contain "" → UI shows a placeholder
   technologies: string[];
 };
 
@@ -46,9 +165,9 @@ type Education = {
 type Certification = { id: string; name: string; issuer: string; year: string };
 
 type AiIntelligence = {
-  masterKeywords: string[];       // the AI-visible keyword dictionary (~15 max)
-  baselineSummary: string;        // what the AI may use as base summary
-  lastExtractedAt: string | null; // null = never extracted
+  masterKeywords: string[];        // the keyword dictionary matching runs on (~15 max)
+  baselineSummary: string;         // what the AI may reuse as a summary base
+  lastExtractedAt: string | null;  // null = never extracted → UI shows "—"
 };
 
 type MasterProfile = {
@@ -63,34 +182,64 @@ type MasterProfile = {
   updatedAt: string;
 };
 
-type Language = "en" | "fr";
+type GapAnalysis = {
+  score: number;                   // round(matched / (matched + missing) * 100)
+  matched: string[];               // keywords you already have
+  missing: string[];               // keywords the job wants that you lack
+  notes: Record<string, string>;   // legacy, always {}; UI no longer writes it
+  added: string[];                 // legacy, always []; UI no longer writes it
+};
+
+type Job = {
+  id: string;
+  language: Language;
+  title: string;                   // detected from the JD first line
+  company: string;                 // "" until detected later
+  location?: string;
+  description: string;             // raw pasted JD, stored verbatim
+  createdAt: string;
+  cv: MasterProfile;               // the frozen CV — the job's own document
+  fileName?: string;               // renamed PDF filename, else client default
+  analysis: GapAnalysis;           // ALWAYS set — creation analyzes once
+  // legacy, only for old browser data — the API may omit both:
+  rewrites: [];                    // always []
+  tailored: null;                  // always null
+};
 ```
 
-Storage hint: two tables max —
-`profiles(lang PK, data JSONB)` and
-`jobs(id PK, title, company, language, description, file_name, created_at, analysis JSONB, cv JSONB)`.
+DB hint — two tables, that's it:
+
+```
+profiles (lang PK,   data JSONB, updated_at)
+jobs     (id PK,  title, company, language, description,
+          file_name nullable, created_at, analysis JSONB, cv JSONB)
+```
+
+No `status` column — the old draft/analyzed/tailed pipeline was dropped
+(it never reflected real state; the UI keeps only the EN/FR badge).
+If an old client still sends `status`, ignore it silently, never return it.
+
+Handle editable `bullets: [""]` — never "clean" empty strings server-side;
+the UI renders them as click-to-edit placeholders.
 
 ---
 
-# Page 1 — Profile (`/profile`)
+## 5. Endpoints, page by page
 
-Master data editor. Four endpoints, one AI call, no AI required anywhere.
+### Page 1 — Profile (`/profile`)
 
-## `GET /api/profile/{lang}`
-
-Called on `/profile` mount and after every language switch.
-
-- Request body: none
-- Unknown `lang` → `404 { "detail": "unknown language" }`
-- **Never-saved profile → `200` with the empty structure below** (no seed
-  data: the user's real data must never be confusable with demo data)
+#### `GET /api/profile/{lang}`
+- **Where/why:** `/profile` mount + every language switch.
+- Request body: none.
+- Unknown `lang` → `404`.
+- **Never-saved profile → `200` with the empty structure below.** Deliberate:
+  no seed/demo data, so real saved data can never be confused with samples.
+  The empty structure is also exactly what `DELETE` returns.
 
 ```json
 {
-  "contact": {
-    "fullName": "", "targetTitle": "", "phone": "", "email": "",
-    "city": "", "github": "", "linkedin": "", "portfolio": ""
-  },
+  "contact": { "fullName": "", "targetTitle": "", "phone": "", "email": "",
+               "city": "", "github": "", "linkedin": "", "portfolio": "" },
   "summary": "",
   "skillGroups": [],
   "experience": [],
@@ -102,49 +251,38 @@ Called on `/profile` mount and after every language switch.
 }
 ```
 
-## `PUT /api/profile/{lang}`
+#### `PUT /api/profile/{lang}`
+- **Where/why:** debounced autosave of every edit on `/profile`.
+- Request body: full `MasterProfile` (same shape as above response).
+- Response `200`: stored `MasterProfile` with fresh `updatedAt`.
+- Full replace — replace the entire JSON, nothing merged.
+- `422` malformed body; `404` unknown lang.
 
-Autosave, debounced 500 ms client-side. **Full replace** (one editor section
-edits one deep slice; no partial-patch worth it at this scale).
+#### `DELETE /api/profile/{lang}`
+- **Where/why:** the "Reset data" button (client confirms first).
+- Response `200`: the same empty `MasterProfile` as a first-time GET.
+  (Not 204 — the client adopts the returned object as its new state.)
 
-- Request body: full `MasterProfile` (same shape as GET response)
-- Response `200`: stored `MasterProfile` with fresh `updatedAt`
-- `422 { "detail": "..." }` on malformed body; `404` on unknown `lang`
-
-## `DELETE /api/profile/{lang}`
-
-"Reset data" button (client confirms before calling). True fresh start:
-
-- Request body: none
-- Response `200`: the **empty `MasterProfile`** (identical to never-saved GET)
-- The empty object must never be confused with seeded demo data
-
-## `POST /api/profile/{lang}/extract-intelligence`
-
-"Save & extract" button — the only AI call on this page, always explicit.
-
-- Request body: none (server reads the stored profile itself)
+#### `POST /api/profile/{lang}/extract-intelligence`  ⚡ AI
+- **Where/why:** the explicit "Save & extract" button. The only AI call on
+  this page. Server reads the stored profile itself — no body to send.
 - Response `200` (AI path): `{ "aiUsed": true, "data": AiIntelligence }`
 - Response `200` (fallback, ≤ ~10 s): `{ "aiUsed": false, "data": AiIntelligence }`
-  where the fallback derives keywords locally from `skillGroups.skills`,
-  `experience[].technologies`, `projects[].techStack` (max ~15) and builds the
-  baseline summary template-style
-- The backend merges `data` into the stored profile's `aiIntelligence`
-  (+ fresh `updatedAt`); the client replaces its `aiIntelligence` block
-- Client behavior on `aiUsed: false`: show the result, never block, never 500
+  where the fallback derives keywords locally from `skillGroups.skills` +
+  `experience[].technologies` + `projects[].techStack` (max ~15) and builds a
+  template baseline summary. **Never 500.**
+- Server merges `data` into the stored profile (`aiIntelligence` + new
+  `updatedAt`); the client replaces its `aiIntelligence` block.
+- Why this exists: `masterKeywords` is the dictionary every job analysis runs
+  against, and `baselineSummary` is what later tailor prompts may start from.
 
----
+### Page 2 — Home (`/`) + New CV (`/jobs/new`)
 
-# Page 2 — Home (`/`) + job creation (`/jobs/new`)
-
-Cards must stay light: the list endpoint ships **no CV payloads**.
-
-## `GET /api/jobs`
-
-Called on home mount. Newest first (`createdAt` desc).
-
-- Request body: none
-- Response `200`: `JobCard[]` — possibly empty (`[]`)
+#### `GET /api/jobs`
+- **Where/why:** home mount — the saved-CV cards.
+- Request body: none.
+- Response `200`: `JobCard[]`, newest first, `[]` when none. **No CV
+  payloads** — the list must stay light:
 
 ```ts
 type JobCard = {
@@ -154,196 +292,135 @@ type JobCard = {
   location?: string;
   language: Language;          // drives the EN/FR badge
   createdAt: string;
-  score: number;               // analysis.score (always present — see below)
+  score: number;               // analysis.score
   matchedCount: number;        // analysis.matched.length
   missingCount: number;        // analysis.missing.length
-  fileName?: string;           // renamed filename, if any
-};
-```
-
-No `cv`, no `description`, no `analysis` object in the list — those live in
-`GET /api/jobs/{id}` (workspace page, next section).
-
-## `POST /api/jobs`
-
-Create + analyze in a single call (matches `/jobs/new`: paste JD → Analyze).
-
-**Request body:**
-```json
-{ "language": "en", "description": "<full pasted job posting>" }
-```
-- `language` must be `"en" | "fr"` → else `404`
-- `description` must be non-empty after trim (cap ~50k chars) → else `422`
-
-**What the backend does, in order:**
-1. **Freeze the CV** — copy the current `profiles[language]` into the new
-   job's `cv` (frozen at creation; later profile edits never touch it,
-   and AI/inline edits go into this copy only)
-2. **Detect the title** — first non-empty line of `description`,
-   leading `#`/markdown stripped, capped at 80 chars (AI detection later)
-3. **Analyze** — compare the JD text against the frozen `cv.aiIntelligence.masterKeywords`:
-   - `matched` = master keywords present in the JD text (case-insensitive)
-   - `missing` = keywords the job requires that the user lacks (AI-assisted
-     when available; heuristic/template otherwise)
-   - `notes = {}` empty map, `added = []`
-   - `score = round(matched / (matched + missing) * 100)` (0 if none)
-4. `createdAt = now`, `fileName` unset (the client computes the default
-   `Name - Position - LANG.pdf`; rename arrives via PATCH)
-
-**Response `201`:** the **full `Job`** — same shape the workspace expects:
-```ts
-type Job = {
-  id: string;
-  language: Language;
-  title: string;
-  company: string;             // "" until detected later
-  location?: string;
-  description: string;         // raw pasted JD, stored verbatim
-  createdAt: string;
-  cv: MasterProfile;           // frozen at creation
   fileName?: string;
-  analysis: GapAnalysis;       // always set — creation analyzes, done
-  rewrites: [];                // legacy field, always empty, kept for compat
-  tailored: null;              // legacy field, always null, kept for compat
-};
-
-type GapAnalysis = {
-  score: number;
-  matched: string[];
-  missing: string[];
-  notes: Record<string, string>;
-  added: string[];
 };
 ```
 
-**Works with zero AI calls**: matching falls back to plain substring analysis.
+#### `POST /api/jobs`
+- **Where/why:** "Analyze" on `/jobs/new` — create + analyze in one call.
+- Request body: `{ "language": "en", "description": "<full pasted JD>" }`
+  (unknown `language` → `422`; `description` empty after trim → `422`,
+  cap ~50k chars).
+- Do, in order:
+  1. **Freeze the CV** — copy `profiles[language]` into `job.cv` (this copy
+     is the saved CV for this job; the profile and other jobs never change)
+  2. **Detect the title** — first non-empty line, strip leading `#`/markdown,
+     cap 80 chars (AI detection later, same response shape)
+  3. **Analyze** against `job.cv.aiIntelligence.masterKeywords`:
+     `matched` = present in the JD text (case-insensitive);
+     `missing` = job-required keywords the user lacks (AI-assisted when
+     available, heuristic otherwise);
+     `score = round(matched / (matched + missing) * 100)` (0 if none);
+     `noted = {}`, `added = []`
+  4. `createdAt = now`, `fileName` unset (client computes the default
+     `Name - Position - LANG.pdf`; a rename arrives via PATCH)
+- Response `201`: the **full `Job`** (types above).
+- Works with zero AI (plain substring analysis).
 
-**Note — no job status:** there is no `status` field anywhere ("draft /
-analyzed / tailed" was dropped — it never reflected real state). Jobs live
-in language only; the card keeps the EN/FR badge. Legacy clients/saved
-payloads that still carry a `status` string: the backend must ignore it
-silently on input and never return it.
+### Page 3 — Workspace (`/jobs/{id}`)
 
-## Notes
-- The profile **completeness nudge** on home uses `GET /api/profile/{lang}`
-  (page 1) — no extra endpoint
-- There is no delete on home today; when wanted later:
-  `DELETE /api/jobs/{id}` → `204`
+#### `GET /api/jobs/{id}`
+- **Where/why:** workspace mount — the whole screen renders from it.
+- Response `200`: full `Job` (incl. `cv`, `description`, `analysis`).
+  Unknown id → `404 { "detail": "job not found" }`.
+- The **analysis always exists** — POST /api/jobs sets it at creation.
+  There is no "no analysis yet" state and no separate analyze endpoint.
 
----
+#### `PATCH /api/jobs/{id}`
+- **Where/why:** top-bar renames only — the title popover and the PDF
+  filename chip. Partial body, only what changed:
+  `{ "title": "...", "fileName": "Nizar - Senior Dev - EN.pdf" }`
+- Response `200`: full `Job` (client may ignore and keep its local value).
+- Unknown id → `404`; whitespace-only provided field → `422`.
 
-# Page 3 — Job workspace (`/jobs/{id}`)
+#### `PUT /api/jobs/{id}/cv`
+- **Where/why:** the saved-CV autosave. Fires debounced 500 ms after every
+  inline edit on the A4 CV, plus quick-adds and added/deleted bullets.
+- Request body: the whole edited `MasterProfile` — full replace.
+- Response `200`: stored `MasterProfile`.
+- **Must never touch `profiles[lang]`.** The job's `cv` is its own document;
+  this is what makes tailoring per-job possible at all.
 
-The job owns its own saved CV (`cv`: starts as the creation-time copy of the
-profile, then absorbs AI results and every manual edit). Nothing here ever
-writes to `profiles`.
-
-## `GET /api/jobs/{id}`
-
-Called on workspace mount.
-
-- Request body: none
-- Response `200`: full `Job` (same type as `POST /api/jobs` — with `cv`,
-  `description`, `analysis`, the works)
-- Unknown id → `404 { "detail": "job not found" }`
-
-**The analysis always exists.** `POST /api/jobs` sets it at creation, so there
-is no "no analysis yet" state and no re-analyze endpoint — the analyze flow
-runs once per job, at creation. Legacy payloads without an `analysis`
-object: the backend should normalize them on read (or migrate), not expose
-an nullable `analysis` field.
-
-## `PATCH /api/jobs/{id}`
-
-Top-bar edits only: rename the job title (popover) and rename the PDF file
-(FileChip). Partial body — send only what changed.
-
-**Request body:**
-```json
-{ "title": "Senior Dev — Targeted CV", "fileName": "Nizar - Senior Dev - EN.pdf" }
-```
-
-- Response `200`: full `Job` (client may already know the value; ignore the
-  response or use it to reconcile)
-- Unknown id → `404`; empty/whitespace value for a provided field → `422`
-
-## `PUT /api/jobs/{id}/cv`
-
-**The saved-CV autosave.** Fires debounced (500 ms) after every inline edit,
-quick-add ("+ this category chip"), bullet add/delete, and after the AI merge.
-The client sends the whole edited `MasterProfile` — full replace, same
-semantics as `PUT /api/profile/{lang}`.
-
-- Request body: full `MasterProfile` (the job's `cv`)
-- Response `200`: stored `MasterProfile` (fresh `updatedAt`) — client ignores
-- This must **never** touch `profiles[lang]` — the job's copy is its own document
-
-## `POST /api/jobs/{id}/integrate-missing`
-
-"Ask AI" — the workspace's single AI call, always explicit. Weaves the
-missing keywords into the CV per the user's per-keyword prompts.
-
-**Request body:**
+#### `POST /api/jobs/{id}/integrate-missing`  ⚡ AI
+- **Where/why:** "Ask AI" under the missing-keyword chips — the workspace's
+  only AI call, always explicit.
+- Request body:
 ```json
 {
   "keywords": ["GraphQL", "Kubernetes"],
   "prompts": [
-    "Mention where and how each keyword is used, tied to real experience or projects"
+    "Say where each keyword is used and how, tied to real experience/projects"
   ],
   "language": "en"
 }
 ```
-- `keywords`: the currently-missing keywords (client-computed live scan)
-- `prompts`: one string per keyword, the user's instruction for it
-- `language`: convenience echo of the job language (server can ignore it)
+  (`keywords` = the currently-missing ones; `prompts` = one string per
+  keyword, the user's instruction; `language` is a convenience echo of the
+  job language — server can ignore it.)
+- What the server does: with a flash model, weave each keyword into
+  `experience`/`projects` bullets of the job's `cv`, honoring the prompt;
+  save the new `cv` on the job; seconds, not minutes — use a small/free
+  model and a strict timeout.
+- Response `200` (AI path): `{ "aiUsed": true, "cv": MasterProfile }`
+- Response `200` (fallback — no key / quota / timeout, ≤ ~15 s):
+  `{ "aiUsed": false, "cv": MasterProfile }` with the cv **unchanged**, and
+  the client shows an advisory toast ("AI unavailable — edit manually").
+  **Never 500.**
 
-**What the backend does:** generates targeted bullets per keyword against the
-job's frozen `cv` **in memory**, merges them into `experience`/`projects`
-(`masterKeywords` that are now present behave like any cv text), stores the
-new `cv` on the job, and returns it.
-
-**Response `200` (AI path):**
-```json
-{ "aiUsed": true, "cv": MasterProfile }
-```
-
-**Response `200` (fallback — no key / quota / timeout, ≤ ~15 s):**
-```json
-{ "aiUsed": false, "cv": MasterProfile }
-```
-with the `cv` **unchanged** — the client keeps its old state and shows an
-advisory toast ("AI unavailable — weave it in manually"), never a 500.
-
-Timeout target: seconds (small/flash model). The client already shows a
-spinner for the duration.
-
-## What needs no endpoint (frontend-only)
-
-| Feature | Why local |
+#### Frontend-only features — build NO endpoints for these
+| Feature | Why it needs no backend |
 |---|---|
-| Live scan (green flips, re-score) | `cvText(cv)` substring check + counts |
-| Word-level highlight / navigate | CSS Highlight API on the rendered CV |
-| Quick add chip | one skill edit → goes through `PUT .../cv` |
-| Print / Save as PDF | `window.print()`, filename via `document.title` |
-| `notes`/"add anyway" map | superseded — a keyword is missing until its text is on the CV |
-| `rewrites` / `tailored` job fields | legacy, UI removed; still stored for compat |
+| Live keyword scan (green flips, live score) | local text search over `cv` |
+| Keyword click → highlight / scroll in the CV | DOM/CSS, already built |
+| Room quick-add | one skill edit → rides on `PUT .../cv` |
+| Print / Save as PDF | `window.print()`; filename via `document.title` |
+| Completeness %, home cards dots | computed in the browser |
 
 ---
 
-## Recap — full endpoint surface
+## 6. Swap map — what replaces what in the frontend code
 
-| # | Method | Path | AI? |
-|---|--------|------|-----|
-| 1 | GET | `/api/profile/{lang}` | no |
-| 2 | PUT | `/api/profile/{lang}` | no |
-| 3 | DELETE | `/api/profile/{lang}` | no |
-| 4 | POST | `/api/profile/{lang}/extract-intelligence` | yes (fallback local) |
-| 5 | GET | `/api/jobs` | no |
-| 6 | POST | `/api/jobs` | optional (title detect / missing detect) |
-| 7 | GET | `/api/jobs/{id}` | no |
-| 8 | PATCH | `/api/jobs/{id}` | no |
-| 9 | PUT | `/api/jobs/{id}/cv` | no |
-| 10 | POST | `/api/jobs/{id}/integrate-missing` | yes (fallback no-op) |
+| Today (mock) | Becomes | File |
+|---|---|---|
+| read/write localStorage profile | `GET/PUT /api/profile/{lang}` | `lib/profile-store.ts` |
+| read/write localStorage jobs | `GET /api/jobs`, `GET/PATCH/PUT` on `/api/jobs/{id}...` | `lib/jobs-store.ts` |
+| `mockAnalyze()` | `POST /api/jobs` (created with response) | `mock/generate.ts` |
+| `mockExtractIntelligence()` | `POST /api/profile/{lang}/extract-intelligence` | `mock/generate.ts` |
+| `mockAutoFit()` | `POST /api/jobs/{id}/integrate-missing` | `mock/generate.ts` |
+| `withDelay()` fake spinners | delete — real network latency | `mock/index.ts` |
+| language picker state | drives `GET /api/profile/{lang}` | per page |
 
-Ten endpoints, nine of them work with zero AI — the app never requires a
-model to function.
+Expected runtime behavior after the swap: same screens, same states, same
+spinners — only the storage behind them changes.
+
+---
+
+## 7. Overview table + build order (suggested)
+
+| # | Method | Path | AI? | Page |
+|---|--------|------|-----|------|
+| 1 | GET | `/api/profile/{lang}` | no | Profile |
+| 2 | PUT | `/api/profile/{lang}` | no | Profile |
+| 3 | DELETE | `/api/profile/{lang}` | no | Profile |
+| 4 | POST | `/api/profile/{lang}/extract-intelligence` | **yes** (fallback local) | Profile |
+| 5 | GET | `/api/jobs` | no | Home |
+| 6 | POST | `/api/jobs` | optional (title/missing detection) | New CV |
+| 7 | GET | `/api/jobs/{id}` | no | Workspace |
+| 8 | PATCH | `/api/jobs/{id}` | no | Workspace |
+| 9 | PUT | `/api/jobs/{id}/cv` | no | Workspace |
+| 10 | POST | `/api/jobs/{id}/integrate-missing` | **yes** (fallback no-op) | Workspace |
+
+1. `profiles` table + `GET`/`PUT /api/profile/{lang}` — no AI, easier to test
+   straight in the browser
+2. `jobs` table + `POST /api/jobs` + `GET /api/jobs` + `GET /api/jobs/{id}`
+3. `PATCH /api/jobs/{id}` + `PUT /api/jobs/{id}/cv` (autosave lives here)
+4. `DELETE /api/profile/{lang}` (trivial)
+5. AI calls last, each wired to Gemini free tier with its fallback behavior:
+   extract-intelligence → integrate-missing
+
+Ten endpoints total. Eight work with zero AI. Only #4 (extract-intelligence)
+and #10 (integrate-missing) call a model — both with explicit `aiUsed`
+fallbacks so the app never requires one.
