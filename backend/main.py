@@ -1,20 +1,8 @@
-import os
+"""CVPolish FastAPI backend.
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-
-app = FastAPI()
-
-# Allow the Next.js dev server to call the API
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:3000").split(","),
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-
-@app.get("/health")
-def health_check():
-    return {"status": "healthy"}
+App entry point. Your job in step 1:
+- create the FastAPI app
+- add CORS for http://localhost:3000
+- include the profile router from app/routers
+- (uvicorn in the Dockerfile looks for `main:app`)
+"""
