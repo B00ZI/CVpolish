@@ -118,6 +118,10 @@ export interface Job {
   description: string;         // raw pasted job description
   createdAt: string;           // ISO date
   status: JobStatus;
+  /** Full frozen CV at creation — AI edits live here, not in the profile. */
+  cv: MasterProfile;
+  /** PDF filename override; falls back to a computed default when unset. */
+  fileName?: string;
   analysis: GapAnalysis | null;
   rewrites: RewriteDiff[];     // filled after the AI rewrite step
   tailored: TailoredResult | null;  // filled when user accepts rewrites

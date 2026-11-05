@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import type { Job, MasterProfile } from "@/lib/types";
 import { profileCompleteness } from "@/lib/completeness";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { TopBar } from "@/components/top-bar";
 import { loadProfile } from "@/lib/profile-store";
 import { loadJobs } from "@/lib/jobs-store";
 import { mockJobs, mockProfile } from "@/mock";
@@ -49,14 +50,13 @@ export function Home() {
   return (
     <div className="min-h-screen">
       {/* Top bar */}
-      <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-6">
-          <Link
-            href="/"
-            className="text-[15px] font-semibold tracking-tight"
-          >
+      <TopBar
+        left={
+          <Link href="/" className="text-[15px] font-semibold tracking-tight">
             CVPolish
           </Link>
+        }
+        right={
           <nav className="flex items-center gap-5">
             <Link
               href="/"
@@ -72,8 +72,8 @@ export function Home() {
             </Link>
             <ThemeToggle />
           </nav>
-        </div>
-      </header>
+        }
+      />
 
       <main className="mx-auto max-w-5xl px-6 pb-24 pt-10">
         {/* Title row */}

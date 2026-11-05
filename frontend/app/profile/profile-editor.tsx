@@ -1,8 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -10,6 +8,7 @@ import type { Language, MasterProfile } from "@/lib/types";
 import { profileCompleteness } from "@/lib/completeness";
 import { clearProfile, loadProfile, saveProfile } from "@/lib/profile-store";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { BackLink, TopBar } from "@/components/top-bar";
 import { mockProfile, mockProfileFr, mockExtractIntelligence, withDelay } from "@/mock";
 import {
   CertificationsSection,
@@ -121,19 +120,15 @@ export function ProfileEditor() {
   return (
     <div className="min-h-screen">
       {/* Top bar */}
-      <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-4 px-6">
-          <div className="flex items-center gap-4">
-            <Link
-              href="/"
-              className="flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" />
-              Home
-            </Link>
+      <TopBar
+        left={
+          <>
+            <BackLink href="/">Home</BackLink>
             <span className="text-sm font-medium">Profile</span>
-          </div>
-          <div className="flex items-center gap-3">
+          </>
+        }
+        right={
+          <>
             {/* Language db switcher: EN and FR are separate profiles */}
             <div className="flex overflow-hidden rounded-lg border border-border">
               {(["en", "fr"] as Language[]).map((l) => (
@@ -164,9 +159,9 @@ export function ProfileEditor() {
               Reset data
             </Button>
             <ThemeToggle />
-          </div>
-        </div>
-      </header>
+          </>
+        }
+      />
 
       {/* Mobile section nav */}
       <nav className="no-scrollbar sticky top-14 z-30 flex gap-1 overflow-x-auto border-b border-border bg-background/90 px-4 py-2 backdrop-blur md:hidden">

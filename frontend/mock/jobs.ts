@@ -1,6 +1,9 @@
 import type { Job } from "@/lib/types";
+import { mockProfile, mockProfileFr } from "./profile";
 
 // FAKE job descriptions + analyses for the mock phase.
+// Each job freezes its own CV copy (cv) like a real job would —
+// edits inside the workspace land there, not on the shared profile.
 
 const northboundJd = `Frontend Developer (React / Next.js) — Remote
 
@@ -41,6 +44,7 @@ export const mockJobs: Job[] = [
     description: northboundJd,
     createdAt: "2026-10-27T09:30:00.000Z",
     status: "analyzed",
+    cv: mockProfile,
     analysis: {
       score: 76,
       matched: [
@@ -128,6 +132,7 @@ export const mockJobs: Job[] = [
     description: medilinkJd,
     createdAt: "2026-10-24T14:00:00.000Z",
     status: "tailed",
+    cv: mockProfileFr,
     analysis: {
       score: 91,
       matched: [

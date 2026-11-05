@@ -1,16 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Loader2, Sparkles } from "lucide-react";
+import { Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import type { Job, Language } from "@/lib/types";
 import { loadProfile } from "@/lib/profile-store";
 import { upsertJob } from "@/lib/jobs-store";
 import { mockAnalyze, withDelay } from "@/mock";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { TopBar, BackLink } from "@/components/top-bar";
 import { cn } from "@/lib/utils";
 
 const LANGUAGES: {
@@ -40,6 +39,9 @@ export function NewJob() {
         .split("\n")
         .find((l) => l.trim()) ?? "";
     const title = firstLine.replace(/^#+\s*/, "").slice(0, 80);
+    // The job owns a frozen copy of the profile at creation time:
+    // AI edits stay in the job and later profile changes never touch it.
+    const profile = loadProfile(lang);
     const job: Job = {
       id: `job-${Date.now()}`,
       language: lang,
@@ -48,11 +50,12 @@ export function NewJob() {
       description,
       createdAt: new Date().toISOString(),
       status: "analyzed",
+      cv: profile,
       analysis: null,
       rewrites: [],
       tailored: null,
     };
-    job.analysis = mockAnalyze(job, loadProfile(lang));
+    job.analysis = mockAnalyze(job, profile);
     await withDelay(null, 1400);
     upsertJob(job);
     router.push(`/jobs/${job.id}`);
@@ -61,18 +64,7 @@ export function NewJob() {
   return (
     <div className="min-h-screen">
       {/* Top bar */}
-      <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-6">
-          <Link
-            href="/"
-            className="flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Your CVs
-          </Link>
-          <ThemeToggle />
-        </div>
-      </header>
+      <TopBar left={<BackLink href="/">Your CVs</BackLink>} />
 
       <main className="mx-auto max-w-3xl px-6 pb-24 pt-10">
         {lang === null ? (

@@ -2,17 +2,28 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Check, Loader2, Printer, Sparkles } from "lucide-react";
+import { Check, FileText, Loader2, Printer, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { BackLink, TopBar } from "@/components/top-bar";
 import type { GapAnalysis, Job, MasterProfile } from "@/lib/types";
 import { getJob, upsertJob } from "@/lib/jobs-store";
-import { loadProfile, saveProfile } from "@/lib/profile-store";
-import { mockAnalyze, mockAutoFit, mockProfile, withDelay } from "@/mock";
+import { loadProfile } from "@/lib/profile-store";
+import { defaultCvFileName } from "@/lib/filename";
+import { mockAnalyze, mockAutoFit, withDelay } from "@/mock";
 import { CvPreview } from "./cv-preview";
 
 /** All text that is actually rendered on the CV — the live scan runs on this. */
@@ -47,9 +58,11 @@ interface AnalysisBlockProps {
 
 export function Workspace({ jobId }: { jobId: string }) {
   const [job, setJob] = useState<Job | null | undefined>(undefined);
-  const [profile, setProfile] = useState<MasterProfile>(mockProfile);
+  // profile === job.cv (the job's frozen CV) after load
+  const [profile, setProfile] = useState<MasterProfile | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [autofitting, setAutofitting] = useState(false);
+  const [jobDetailsOpen, setJobDetailsOpen] = useState(false);
   const hitTimer = useRef<number | null>(null);
 
   useEffect(() => {
@@ -71,9 +84,22 @@ export function Workspace({ jobId }: { jobId: string }) {
 
   useEffect(() => {
     const j = getJob(jobId);
-    setJob(j ?? null);
-    // Load the profile db for this job's language (EN or FR).
-    if (j) setProfile(loadProfile(j.language));
+    if (!j) {
+      setJob(null);
+      setProfile(null);
+      return;
+    }
+    // One-time migration: old jobs have no frozen CV yet — snapshot the
+    // current profile so existing edits are preserved, then work on it.
+    if (!j.cv) {
+      const next: Job = { ...j, cv: loadProfile(j.language) };
+      upsertJob(next);
+      setJob(next);
+      setProfile(next.cv);
+    } else {
+      setJob(j);
+      setProfile(j.cv);
+    }
   }, [jobId]);
 
   function mutate(fn: (j: Job) => Job) {
@@ -85,19 +111,26 @@ export function Workspace({ jobId }: { jobId: string }) {
     });
   }
 
-  /** Persist a profile edit (inline CV edits + quick add). */
+  /** Persist a CV edit (inline edits + quick add) into the job's frozen CV.
+   *  The master profile is untouched — other jobs and /profile stay as they
+   *  were when this job was created. */
   function updateProfile(fn: (p: MasterProfile) => MasterProfile) {
-    if (!job) return;
-    const next = fn(profile);
-    setProfile(next);
-    saveProfile(next, job.language);
+    if (!profile) return;
+    const cv = fn(profile);
+    setProfile(cv);
+    setJob((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev, cv };
+      upsertJob(next);
+      return next;
+    });
   }
 
   // ===== Live scan: every keyword (matched + missing) re-checked against
   // the CV on each edit — both directions stay truthful. No "add anyway":
   // a keyword is missing until its text actually lives on the CV. =====
   const [matchedLive, missingLive, score] = useMemo<[string[], string[], number]>(() => {
-    if (!job?.analysis) return [[], [], 0];
+    if (!job?.analysis || !profile) return [[], [], 0];
     const a = job.analysis;
     const text = cvText(profile);
     const onCv = (kw: string) => text.includes(kw.toLowerCase());
@@ -110,6 +143,7 @@ export function Workspace({ jobId }: { jobId: string }) {
 
   // Navigation targets in the CV (edits where keywords can land manually)
   const targets = useMemo<{ id: string; label: string }[]>(() => {
+    if (!profile) return [];
     return [
       { id: "summary", label: "Summary" },
       ...profile.experience.map((e) => ({
@@ -123,7 +157,7 @@ export function Workspace({ jobId }: { jobId: string }) {
     ];
   }, [profile]);
 
-  const categories = profile.skillGroups.map((g) => ({
+  const categories = (profile?.skillGroups ?? []).map((g) => ({
     id: g.id,
     label: g.category,
   }));
@@ -152,8 +186,17 @@ export function Workspace({ jobId }: { jobId: string }) {
     );
   }
 
+  if (!profile) {
+    return (
+      <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">
+        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        Loading…
+      </div>
+    );
+  }
+
   async function analyzeNow() {
-    if (analyzing) return;
+    if (analyzing || !profile) return;
     setAnalyzing(true);
     await withDelay(null, 1200);
     mutate((j) => ({ ...j, analysis: mockAnalyze(j, profile) }));
@@ -248,48 +291,71 @@ export function Workspace({ jobId }: { jobId: string }) {
   /** Bulk AI fit: the user prompts how the missing keywords should be
    *  woven in; mock for POST /api/cv/integrate-missing (Gemini). */
   async function autoFit(prompt: string) {
-    if (autofitting || missingLive.length === 0) return;
+    if (autofitting || missingLive.length === 0 || !job) return;
     setAutofitting(true);
     const kws = missingLive;
     await withDelay(null, 1800);
     void prompt; // real backend sends this as part of the request body
-    updateProfile((p) => mockAutoFit(p, kws, job!.language));
+    updateProfile((p) => mockAutoFit(p, kws, job.language));
     setAutofitting(false);
     toast("AI fit done", {
       description: `${kws.length} keyword${kws.length > 1 ? "s" : ""} woven into your bullets (mock POST /api/cv/integrate-missing).`,
     });
   }
 
+  /** Print with the CV's filename pre-set — Chrome's "Save as PDF" uses the
+   *  page title as the default save name; we restore it right after. */
+  function printCv() {
+    if (!job || !profile) return;
+    const prev = document.title;
+    document.title = job.fileName ?? defaultCvFileName(profile, job.language);
+    window.print();
+    window.addEventListener(
+      "afterprint",
+      () => {
+        document.title = prev;
+      },
+      { once: true },
+    );
+  }
+
   return (
     <div className="min-h-screen print:min-h-0 lg:flex lg:h-screen lg:flex-col lg:overflow-hidden print:h-auto print:overflow-visible">
-      {/* Top bar */}
-      <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur print:hidden lg:shrink-0">
-        <div className="mx-auto flex h-14 max-w-[1800px] items-center justify-between gap-4 px-6">
-          <div className="flex min-w-0 items-center gap-4">
-            <Link
-              href="/"
-              className="flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+      {/* Top bar: back link · job title (opens details) · PDF file chip */}
+      <TopBar
+        wide
+        left={
+          <>
+            <BackLink href="/">Your CVs</BackLink>
+            <span aria-hidden className="block h-4 w-px bg-border" />
+            <button
+              type="button"
+              onClick={() => setJobDetailsOpen(true)}
+              title="Show the original job description"
+              className="min-w-0 truncate text-sm font-medium text-foreground/90 underline-offset-4 transition-colors hover:underline"
             >
-              <ArrowLeft className="h-3.5 w-3.5" />
-              Your CVs
-            </Link>
-            <span className="min-w-0 truncate text-sm font-medium">
               {job.title}
               {job.company ? ` @ ${job.company}` : ""}
-            </span>
-          </div>
-          <div className="flex items-center gap-2 print:hidden">
+            </button>
+            <FileChip
+              job={job}
+              onSave={(name) => mutate((j) => ({ ...j, fileName: name }))}
+            />
+          </>
+        }
+        right={
+          <>
             <Badge variant="secondary">
               {job.status === "tailed" ? "Ready to print" : "In progress"}
             </Badge>
             <ThemeToggle />
-          </div>
-        </div>
-      </header>
+          </>
+        }
+      />
 
       {/* Single view: two independent panes on desktop — the left panel
           is fully pinned (it never moves, no matter how far you scroll) */}
-      <main className="mx-auto max-w-[1800px] px-6 pb-24 pt-8 print:p-0 lg:flex lg:h-full lg:min-h-0 lg:pb-2 lg:pr-3 print:h-auto print:overflow-visible">
+      <main className="mx-auto max-w-[1600px] px-6 pb-24 pt-8 print:p-0 lg:flex lg:h-full lg:min-h-0 lg:pb-2 lg:pr-3 print:h-auto print:overflow-visible">
         <div className="grid gap-10 lg:h-full lg:w-full lg:grid-cols-[minmax(380px,480px)_1fr] lg:gap-24 print:block print:h-auto">
           {/* ===== Left: match & gaps (its own scroll) + pinned finish bar ===== */}
           <aside className="flex flex-col gap-6 print:hidden lg:h-full lg:pr-3">
@@ -333,7 +399,7 @@ export function Workspace({ jobId }: { jobId: string }) {
 
             {/* Always-visible finish bar */}
             <div className="shrink-0 border-t border-border pt-4">
-              <Button onClick={() => window.print()} className="w-full">
+              <Button onClick={printCv} className="w-full">
                 <Printer className="h-4 w-4" />
                 Print / Save as PDF
               </Button>
@@ -353,7 +419,137 @@ export function Workspace({ jobId }: { jobId: string }) {
           </div>
         </div>
       </main>
+
+      {/* Click the job title: rename it / revisit the original posting */}
+      <JobDetailsDialog
+        job={job}
+        open={jobDetailsOpen}
+        onOpenChange={setJobDetailsOpen}
+        onSave={(title) => mutate((j) => ({ ...j, title }))}
+      />
     </div>
+  );
+}
+
+/** Editable PDF filename chip in the top bar. Empty/blank name falls back
+ *  to the default "Name - Position - LANG.pdf" derived from the frozen CV. */
+function FileChip({
+  job,
+  onSave,
+}: {
+  job: Job;
+  onSave: (name: string) => void;
+}) {
+  const fallback = defaultCvFileName(job.cv, job.language);
+  const fileName = job.fileName?.trim() ? job.fileName : fallback;
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+
+  function commit() {
+    const v = draft.trim();
+    if (v && v !== job.fileName) onSave(v);
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <Input
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") setEditing(false);
+          else if (e.key === "Enter") {
+            e.preventDefault();
+            commit();
+          }
+        }}
+        className="h-7 w-56 text-xs"
+      />
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      title="PDF filename — click to rename"
+      onClick={() => {
+        setDraft(fileName);
+        setEditing(true);
+      }}
+      className="hidden max-w-64 items-center gap-1.5 truncate rounded-md border border-border bg-muted/40 px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground sm:flex"
+    >
+      <FileText className="h-3 w-3 shrink-0" />
+      <span className="truncate">{fileName}</span>
+    </button>
+  );
+}
+
+/** Click the job title: rename (it's the navigation name on home cards) and
+ *  the small dialog shows the original pasted posting for reference. */
+function JobDetailsDialog({
+  job,
+  open,
+  onOpenChange,
+  onSave,
+}: {
+  job: Job;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSave: (title: string) => void;
+}) {
+  const [draft, setDraft] = useState(job.title);
+
+  // Re-sync the draft every time the dialog opens
+  useEffect(() => {
+    if (open) setDraft(job.title);
+  }, [open, job.title]);
+
+  function commit() {
+    const v = draft.trim();
+    if (v && v !== job.title) onSave(v);
+    onOpenChange(false);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle>This job</DialogTitle>
+          <DialogDescription>
+            Title, company and language stay with the CV — the posting below is
+            here whenever you need to check it again.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div>
+            <Label htmlFor="job-title-input">Job title</Label>
+            <Input
+              id="job-title-input"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  commit();
+                }
+              }}
+              className="mt-1.5"
+            />
+          </div>
+          <div>
+            <p className="text-sm font-medium">Original job description</p>
+            <div className="cv-scroll mt-1.5 max-h-64 overflow-y-auto whitespace-pre-wrap rounded-md border border-border bg-muted/30 p-3 text-xs leading-relaxed">
+              {job.description}
+            </div>
+          </div>
+        </div>
+        <Button className="w-full" disabled={!draft.trim()} onClick={commit}>
+          Save
+        </Button>
+      </DialogContent>
+    </Dialog>
   );
 }
 
