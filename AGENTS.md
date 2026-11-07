@@ -24,7 +24,8 @@ Read this file before doing anything. Update it when work is done.
 ## Working style (decided 2026-10-29)
 
 - **Frontend first, with mock data.** The UI is built and styled using local mock/fake data so the look can be decided before any API exists. Mock data lives in `frontend/mock/` (or `frontend/lib/`), clearly marked.
-- **The owner writes the backend themselves to learn Python.** Do NOT write backend feature code (endpoints, models, AI logic). Help with hints, review, and fixes only when asked.
+- **The owner writes the backend themselves to learn Python.** Do NOT write backend feature code (endpoints, models, AI logic). Reference backend contract: `backend/API.md`.
+- **Backend review rule (2026-11-07):** in reviews, only REPORT problems with explanations and hints — do NOT fix or edit anything under `backend/`, even small ones. The owner makes every change themselves. Same for compose/backend env wiring. (Exception only if the owner explicitly says "you fix it" for that specific thing.)
 - **Swap mock → real API later.** When the backend is ready, mock data gets replaced by real fetch calls. Design the frontend data shapes to match the future API so the swap is easy.
 
 ## UI decisions (approved 2026-10-29)
