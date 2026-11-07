@@ -1,7 +1,17 @@
-"""App settings, read from environment variables.
+import os
 
-One Settings object (pydantic-settings or plain os.environ) that every other
-module imports — never read env vars anywhere else. It must already know:
-DATABASE_URL, GEMINI_API_KEY (optional — backends must run without it),
-and the frontend origin for CORS.
-"""
+class Settings:
+    PROJECT_NAME: str = os.environ.get("PROJECT_NAME", "CVpolish API")
+    DATABASE_URL: str = os.environ.get(
+        "DATABASE_URL",
+        "postgresql+psycopg2://user:password@db:5432/CVpolish",
+    )
+    GEMINI_API_KEY: str = os.environ.get("GEMINI_API_KEY" , "")
+    
+    CORS_ORIGINS_RAW: str = os.environ.get("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")
+    
+    @property
+    def ALLOWED_ORIGINS(self) -> list[str]:
+        return [origin.strip() for origin in self.CORS_ORIGINS_RAW.split(",")]
+
+settings = Settings()

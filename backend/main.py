@@ -1,8 +1,24 @@
-"""CVPolish FastAPI backend.
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
-App entry point. Your job in step 1:
-- create the FastAPI app
-- add CORS for http://localhost:3000
-- include the profile router from app/routers
-- (uvicorn in the Dockerfile looks for `main:app`)
-"""
+from app.core.config import settings
+from app.core.database import Base, engine
+
+# Importing all model files here registers their tables BEFORE create_all.
+from app import models  # noqa: F401
+
+app = FastAPI(title=settings.PROJECT_NAME)
+Base.metadata.create_all(bind=engine)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}

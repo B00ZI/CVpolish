@@ -1,7 +1,9 @@
-"""SQLAlchemy table: the MasterProfile of one language, stored as JSONB.
+from sqlalchemy import Column , String , DateTime , func 
+from sqlalchemy.dialects.postgresql import JSONB
+from app.core.database import Base
+class Profile(Base):
+    __tablename__ = "profiles"
 
-Shape comes from backend/API.md section 4 (MasterProfile). Columns are just
-`lang` (primary key, "en" | "fr"), `data` (the whole profile JSON), and
-`updated_at`. Keep future Job handling OUT of this file — jobs get their own
-model file when you reach step 2.
-"""
+    lang = Column(String , primary_key=True , index = True)
+    data =  Column(JSONB , nullable=False)
+    updated_at= Column(DateTime , default=func.now() , onupdate=func.now())
