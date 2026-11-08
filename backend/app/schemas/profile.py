@@ -1,13 +1,4 @@
-"""Pydantic schemas for the profile endpoints (request + response bodies).
-
-Copy the MasterProfile / AiIntelligence types 1:1 from backend/API.md —
-the frontend was built on exactly these shapes, so keep field names identical
-(including `bullets" may contain "" placeholders`).
-Two AI-endpoint response wrappers live here too:
-`{ aiUsed: bool, data: AiIntelligence }`.
-"""
-from typing import Literal , Optional , List
-from datetime import datetime
+from typing import   Optional , List
 from pydantic import BaseModel , Field
 
 
@@ -78,12 +69,11 @@ class ProfileBase(BaseModel):
     certifications: List[Certification] = []
     aiIntelligence: AiIntelligence = Field(default_factory=AiIntelligence)
 
-class ProfileResponse(BaseModel):
-    lang: Literal["en", "fr"]
-    data: ProfileBase
-    updated_at: Optional[datetime] = None
+
 
 class MasterProfileResponse(ProfileBase):
-    """What the frontend actually receives: the profile JSON itself,
-    with updatedAt inside it (filled from the DB column, never the stored dict)."""
     updatedAt: Optional[str] = None
+
+class ExtractResponse(BaseModel):
+    aiUsed: bool
+    data: AiIntelligence

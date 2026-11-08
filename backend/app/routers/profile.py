@@ -11,82 +11,159 @@ file; this router is where jobs routers will be added as siblings later
 (app/routers/jobs.py).
 """
 from datetime import datetime, timezone
-from sqlalchemy.orm import Session
+
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+
 from app.core.database import get_db
 from app.models.profile import Profile
-from app.schemas.profile import MasterProfileResponse
+from app.schemas.profile import (
+    AiIntelligence,
+    ExtractResponse,
+    MasterProfileResponse,
+    ProfileBase,
+)
 
 router = APIRouter()
 
 LANGS = ("en", "fr")
 
-# GET
-@router.get("/{lang}", response_model=MasterProfileResponse)
-def get_profile(lang: str, db: Session = Depends(get_db)):
-    # Unknown language string -> 404. A known but never-saved profile is NOT a
-    # 404: the contract says first load gets the empty structure.
-    if lang not in LANGS:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Unknown language '{lang}' — use 'en' or 'fr'.",
-        )
 
-    profile = db.query(Profile).filter(Profile.lang == lang).first()
-    if profile is None:
-        # All schema fields have defaults -> ProfileBase() serializes to
-        # exactly the empty structure from API.md.
-        return MasterProfileResponse(
-            updatedAt=datetime.now(timezone.utc).isoformat()
-        )
-
-    # The updated_at COLUMN is the source of truth — overwrite whatever is
-    # inside the stored JSON so the client always sees the server's value.
+# DB row -> the profile JSON the frontend expects; the updated_at COLUMN wins.
+def to_response(profile: Profile) -> MasterProfileResponse:
     return MasterProfileResponse(
         **{
             **profile.data,
             "updatedAt": profile.updated_at.isoformat() if profile.updated_at else None,
         }
     )
- 
-
-# Page 1 — Profile (/profile)
-# GET /api/profile/{lang}
-# Where/why: /profile mount + every language switch.
-# Request body: none.
-# Unknown lang → 404.
-# Never-saved profile → 200 with the empty structure below. Deliberate: no seed/demo data, so real saved data can never be confused with samples. The empty structure is also exactly what DELETE returns.
-# {
-#   "contact": { "fullName": "", "targetTitle": "", "phone": "", "email": "",
-#                "city": "", "github": "", "linkedin": "", "portfolio": "" },
-#   "summary": "",
-#   "skillGroups": [],
-#   "experience": [],
-#   "projects": [],
-#   "education": [],
-#   "certifications": [],
-#   "aiIntelligence": { "masterKeywords": [], "baselineSummary": "", "lastExtractedAt": null },
-#   "updatedAt": "<ISO now>"
-# }
 
 
+# Empty profile: used by GET (never-saved) and DELETE (reset).
+def empty_profile_response() -> MasterProfileResponse:
+    return MasterProfileResponse(
+        updatedAt=datetime.now(timezone.utc).isoformat()
+    )
 
 
+# Language guard: unknown string -> 404 (contract, not 422).
+def check_lang(lang: str) -> None:
+    if lang not in LANGS:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Unknown language '{lang}' — use 'en' or 'fr'.",
+        )
 
 
+# GET to get a profile
+@router.get("/{lang}", response_model=MasterProfileResponse)
+def get_profile(lang: str, db: Session = Depends(get_db)):
+    check_lang(lang)
 
-# PUT /api/profile/{lang}
-# Where/why: debounced autosave of every edit on /profile.
-# Request body: full MasterProfile (same shape as above response).
-# Response 200: stored MasterProfile with fresh updatedAt.
-# Full replace — replace the entire JSON, nothing merged.
-# 422 malformed body; 404 unknown lang.
-# DELETE /api/profile/{lang}
-# Where/why: the "Reset data" button (client confirms first).
-# Response 200: the same empty MasterProfile as a first-time GET. (Not 204 — the client adopts the returned object as its new state.)
-# POST /api/profile/{lang}/extract-intelligence ⚡ AI
-# Where/why: the explicit "Save & extract" button. The only AI call on this page. Server reads the stored profile itself — no body to send.
-# Response 200 (AI path): { "aiUsed": true, "data": AiIntelligence }
-# Response 200 (fallback, ≤ ~10 s): { "aiUsed": false, "data": AiIntelligence } where the fallback derives keywords locally from skillGroups.skills + experience[].technologies + projects[].techStack (max ~15) and builds a template baseline summary. Never 500.
-# Server merges data into the stored profile (aiIntelligence + new updatedAt); the client replaces its aiIntelligence block.
-# Why this exists: masterKeywords is the dictionary every job analysis runs against, and baselineSummary is what later tailor prompts may start from.
+    profile = db.query(Profile).filter(Profile.lang == lang).first()
+    if profile is None:
+        return empty_profile_response()
+
+    return to_response(profile)
+
+
+# PUT to create or update a profile
+@router.put("/{lang}", response_model=MasterProfileResponse)
+def update_profile(data: ProfileBase, lang: str, db: Session = Depends(get_db)):
+    payload = data.model_dump()
+    check_lang(lang)
+
+    profile = db.query(Profile).filter(Profile.lang == lang).first()
+
+    if profile is None:
+        new_profile = Profile(lang=lang, data=payload)
+        db.add(new_profile)
+        db.commit()
+        db.refresh(new_profile)
+        return to_response(new_profile)
+
+    profile.data = payload
+    db.commit()
+    db.refresh(profile)
+    return to_response(profile)
+
+
+# DELETE to remove a profile and answer with the empty state
+@router.delete("/{lang}", response_model=MasterProfileResponse)
+def delete_profile(lang: str, db: Session = Depends(get_db)):
+    check_lang(lang)
+
+    profile = db.query(Profile).filter(Profile.lang == lang).first()
+    if profile is None:
+        return empty_profile_response()
+
+    db.delete(profile)
+    db.commit()
+    return empty_profile_response()
+
+
+@router.post("/{lang}/extract-intelligence", response_model=ExtractResponse)
+def post_intelligence(lang: str, db: Session = Depends(get_db)):
+    check_lang(lang)
+
+    profile = db.query(Profile).filter(Profile.lang == lang).first()
+    if profile is None:
+        # Nothing stored -> nothing to extract; empty block, aiUsed false.
+        return ExtractResponse(aiUsed=False, data=AiIntelligence())
+
+    new_intelligence = derive_intelligence(profile.data)
+    profile.data = {
+        **profile.data,
+        "aiIntelligence": new_intelligence.model_dump(),
+    }
+    db.commit()
+    db.refresh(profile)
+    return ExtractResponse(aiUsed=False, data=new_intelligence)
+
+
+def derive_intelligence(profile_data: dict) -> AiIntelligence:
+    """Non-AI extraction: keywords from skills + technologies + tech stacks.
+
+    The AI path lands here later (step 4 of the plan): when
+    settings.GEMINI_API_KEY is set, call the model inside try/except and fall
+    through to this local version on ANY failure — the endpoint and the caller
+    never change shape.
+    """
+    groups = profile_data.get("skillGroups", [])
+    experience = profile_data.get("experience", [])
+    projects = profile_data.get("projects", [])
+
+    skill_words = [s for g in groups for s in g.get("skills", [])]
+    tech_words = [t for e in experience for t in e.get("technologies", [])]
+    stack_words = [t for p in projects for t in p.get("techStack", [])]
+
+    # First-come order, dedupe, cap at 15.
+    keywords = [
+        k
+        for k in dict.fromkeys(skill_words + tech_words + stack_words)
+        if k
+    ][:15]
+
+    title = profile_data.get("contact", {}).get("targetTitle", "")
+    skills = ", ".join(keywords[:6])
+    if title and keywords:
+        summary = f"{title} with hands-on experience in {skills}"
+    elif title:
+        summary = f"{title}"
+    elif keywords:
+        summary = f"Hands-on experience in {skills}"
+    else:
+        summary = ""
+
+    names = [p.get("name", "") for p in projects][:2]
+    names = [n for n in names if n]
+    if names:
+        summary += " — shipped projects including " + " and ".join(names)
+    if summary:
+        summary += "."
+
+    return AiIntelligence(
+        masterKeywords=keywords,
+        baselineSummary=summary,
+        lastExtractedAt=datetime.now(timezone.utc).isoformat(),
+    )
