@@ -225,6 +225,125 @@ the UI renders them as click-to-edit placeholders.
 
 ---
 
+## 4b. Example payload — for testing in `/docs`
+
+The `/docs` "Try it out" shows field names but never *what goes inside*
+(`skillGroups`? `links`?). Below is one complete `MasterProfile` with
+realistic values — use it directly as the body for
+`PUT /api/profile/{lang}`, then `POST .../extract-intelligence` and the other
+calls have real data to chew on. Same values as the frontend mock
+(`frontend/mock/profile.ts`), so demo screens and manual tests agree.
+
+```json
+{
+  "contact": {
+    "fullName": "Karim Alaoui",
+    "targetTitle": "Full-Stack Developer",
+    "phone": "+212 6 12 34 56 78",
+    "email": "karim.alaoui.dev@proton.me",
+    "city": "Casablanca, Morocco",
+    "github": "github.com/karim-alaoui",
+    "linkedin": "linkedin.com/in/karim-alaoui",
+    "portfolio": "karimalaoui.dev"
+  },
+  "summary": "Full-stack developer with 3 years of experience shipping web apps with React, TypeScript, and Node.js. I turn rough product ideas into fast, maintainable features — most recently cutting API response times by 40% and halving deploy times with a GitHub Actions pipeline.",
+  "skillGroups": [
+    { "id": "sg-langs",      "category": "Languages",              "skills": ["TypeScript", "JavaScript", "Python", "SQL", "HTML5 / CSS3"] },
+    { "id": "sg-frameworks", "category": "Frameworks & Libraries", "skills": ["React", "Next.js", "Node.js", "Express", "FastAPI", "Tailwind CSS"] },
+    { "id": "sg-databases",  "category": "Databases",              "skills": ["PostgreSQL", "MongoDB", "Redis"] },
+    { "id": "sg-cloud",      "category": "Cloud & DevOps",         "skills": ["Docker", "GitHub Actions", "CI/CD", "AWS (EC2, S3)", "Linux"] },
+    { "id": "sg-tools",      "category": "Tools",                  "skills": ["Git", "Postman", "Figma", "Jira"] }
+  ],
+  "experience": [
+    {
+      "id": "exp-atlas",
+      "jobTitle": "Full-Stack Developer",
+      "company": "Atlas Digital",
+      "location": "Casablanca, Morocco",
+      "startDate": "Feb 2023",
+      "endDate": null,
+      "bullets": [
+        "Optimized SQL queries and added Redis caching, cutting average API response time from 900 ms to 540 ms (−40%)",
+        "Built a CI/CD pipeline with GitHub Actions and Docker, halving deployment time from 25 to 12 minutes",
+        "Shipped a customer dashboard used by 1,200+ monthly users, raising task completion rate by 28%"
+      ],
+      "technologies": ["React", "TypeScript", "Node.js", "PostgreSQL", "Redis", "Docker", "GitHub Actions"]
+    },
+    {
+      "id": "exp-greentech",
+      "jobTitle": "Frontend Developer Intern",
+      "company": "GreenTech Solutions",
+      "location": "Rabat, Morocco",
+      "startDate": "Jun 2022",
+      "endDate": "Sep 2022",
+      "bullets": [
+        "Rebuilt 12 legacy jQuery pages in React, improving Lighthouse performance from 54 to 91",
+        "Integrated Stripe checkout that processed the first 500 paid orders within 3 months"
+      ],
+      "technologies": ["React", "TypeScript", "Stripe"]
+    }
+  ],
+  "projects": [
+    {
+      "id": "prj-shipment",
+      "name": "ShipmentTrack",
+      "description": "Real-time shipment dashboard for small carriers: live map, delay alerts, and report exports.",
+      "techStack": ["Next.js", "TypeScript", "PostgreSQL", "Socket.IO", "Docker"],
+      "links": [
+        { "label": "Live", "url": "https://shipmenttrack.app" },
+        { "label": "GitHub", "url": "https://github.com/karim-alaoui/shipmenttrack" }
+      ],
+      "bullets": [
+        "Streams 5,000+ shipment events per day over WebSockets with live map updates",
+        "Cut initial page load to 1.2 s with route-level code splitting and image optimization"
+      ]
+    },
+    {
+      "id": "prj-devradar",
+      "name": "DevRadar",
+      "description": "Weekly repo-health digest emailed to engineering teams: open PRs, review latency, commit churn.",
+      "techStack": ["Python", "FastAPI", "PostgreSQL", "GitHub API"],
+      "links": [
+        { "label": "GitHub", "url": "https://github.com/karim-alaoui/devradar" }
+      ],
+      "bullets": [
+        "Runs scheduled GitHub API jobs for 40+ repositories with a 99.5% on-time delivery rate",
+        "JWT auth with refresh-token rotation protects private team dashboards"
+      ]
+    }
+  ],
+  "education": [
+    {
+      "id": "edu-h2",
+      "degree": "BSc Computer Science",
+      "major": "Software Engineering",
+      "university": "Hassan II University",
+      "location": "Casablanca, Morocco",
+      "graduationYear": "2023",
+      "coursework": ["Data Structures & Algorithms", "Databases", "Operating Systems"]
+    }
+  ],
+  "certifications": [
+    { "id": "cert-aws", "name": "AWS Certified Cloud Practitioner", "issuer": "Amazon Web Services", "year": "2024" }
+  ],
+  "aiIntelligence": {
+    "masterKeywords": ["React", "TypeScript", "Next.js", "Node.js", "PostgreSQL", "Docker", "CI/CD", "Tailwind CSS", "FastAPI", "Redis", "Git", "Agile"],
+    "baselineSummary": "Full-Stack Developer with 3 years of experience across React, TypeScript, Node.js, and PostgreSQL — ships fast, maintainable features end to end.",
+    "lastExtractedAt": "2026-10-29T10:00:00.000Z"
+  },
+  "updatedAt": "2026-10-29T10:00:00.000Z"
+}
+```
+
+Test checklist with it:
+1. `PUT /api/profile/en` with the JSON above → `200`, response shows a fresh `updatedAt`
+2. `GET /api/profile/en` → same profile back
+3. `POST /api/profile/en/extract-intelligence` → `{ "aiUsed": false, "data": { "masterKeywords": [...], "baselineSummary": "...", "lastExtractedAt": ... } }`
+4. `GET` again → the profile's `aiIntelligence` block now holds step 3's result
+5. `DELETE /api/profile/en` → `200` with the empty structure; `GET` → empty again
+
+---
+
 ## 5. Endpoints, page by page
 
 ### Page 1 — Profile (`/profile`)
