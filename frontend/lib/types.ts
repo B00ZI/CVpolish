@@ -115,11 +115,15 @@ export interface Job {
   location?: string;
   description: string;         // raw pasted job description
   createdAt: string;           // ISO date
-  /** Full frozen CV at creation — AI edits live here, not in the profile. */
+  /** The job's own CV — AI-generated for this JD, or a frozen profile copy
+   *  when AI was unavailable. Edits live here, not in the profile. */
   cv: MasterProfile;
   /** PDF filename override; falls back to a computed default when unset. */
   fileName?: string;
   analysis: GapAnalysis;       // always set — creation analyzes once, done
-  rewrites: RewriteDiff[];     // filled after the AI rewrite step
-  tailored: TailoredResult | null;  // filled when user accepts rewrites
+  /** true = the CV was AI-generated/edited; false = no-AI fallback ran.
+   *  Optional: only old localStorage jobs (pre-backend) may lack it. */
+  aiUsed?: boolean;
+  rewrites: RewriteDiff[];     // legacy, unused in the UI since 2026-11-04
+  tailored: TailoredResult | null;  // legacy, unused in the UI since 2026-11-04
 }

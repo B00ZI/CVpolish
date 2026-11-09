@@ -68,6 +68,7 @@ export const mockJobs: Job[] = [
       },
       added: ["Storybook"],
     },
+    aiUsed: true,
     rewrites: [
       {
         id: "rw-summary",
@@ -153,6 +154,7 @@ export const mockJobs: Job[] = [
       },
       added: [],
     },
+    aiUsed: true,
     rewrites: [],
     tailored: {
       summary:

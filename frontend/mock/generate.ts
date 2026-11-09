@@ -1,37 +1,21 @@
 import type {
   AiIntelligence,
-  GapAnalysis,
   Job,
   Language,
   MasterProfile,
   RewriteDiff,
 } from "@/lib/types";
+import { analyzeForJob } from "@/lib/cv-text";
 
 // FAKE "AI" for the mock phase — instant, local, obviously template-driven.
 // Real generation arrives with the backend (step 4).
 
-/** Fake gap analysis: matches master keywords found in the JD text. */
+/** Fake gap analysis — delegated to the contract implementation in lib/cv-text. */
 export function mockAnalyze(
   job: Pick<Job, "title" | "description">,
   profile: MasterProfile,
-): GapAnalysis {
-  const text = job.description.toLowerCase();
-  const kws = profile.aiIntelligence.masterKeywords;
-  const matched = kws.filter((k) =>
-    text.includes(k.toLowerCase()),
-  );
-  const commonGaps = ["GraphQL", "Jest", "Playwright", "Storybook", "Kubernetes"];
-  const missing = commonGaps
-    .filter((k) => !text.includes(k.toLowerCase()))
-    .slice(0, 3);
-  const total = matched.length + missing.length || 1;
-  return {
-    score: Math.round((matched.length / total) * 100),
-    matched,
-    missing,
-    notes: {},
-    added: [],
-  };
+) {
+  return analyzeForJob(job.description, profile);
 }
 
 /** Extract what the AI keeps from the profile: keywords + a baseline summary. */

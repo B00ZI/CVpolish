@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Sparkles } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import type { Job, Language } from "@/lib/types";
@@ -39,9 +40,11 @@ export function NewJob() {
         .split("\n")
         .find((l) => l.trim()) ?? "";
     const title = firstLine.replace(/^#+\s*/, "").slice(0, 80);
-    // The job owns a frozen copy of the profile at creation time:
-    // AI edits stay in the job and later profile changes never touch it.
+    // The job owns its CV at creation time: the backend will generate it for
+    // this JD (mock = a frozen copy of the profile); later profile edits never
+    // touch it.
     const profile = loadProfile(lang);
+    const analysis = mockAnalyze({ title, description }, profile);
     const job: Job = {
       id: `job-${Date.now()}`,
       language: lang,
@@ -50,12 +53,18 @@ export function NewJob() {
       description,
       createdAt: new Date().toISOString(),
       cv: profile,
-      analysis: mockAnalyze({ title, description }, profile),
+      analysis,
+      aiUsed: true, // mock: pretend the AI generation ran (backend swaps to real)
       rewrites: [],
       tailored: null,
     };
     await withDelay(null, 1400);
     upsertJob(job);
+    toast.success(
+      job.aiUsed
+        ? "AI-generated CV ready"
+        : "Generated without AI — edit manually",
+    );
     router.push(`/jobs/${job.id}`);
   }
 
@@ -126,7 +135,7 @@ export function NewJob() {
               ) : (
                 <Sparkles className="h-4 w-4 text-blue-600" />
               )}
-              {busy ? "Analyzing…" : "Analyze match"}
+              {busy ? "Generating CV…" : "Generate CV"}
             </Button>
           </div>
         </div>

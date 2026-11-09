@@ -15,21 +15,9 @@ import type { GapAnalysis, Job, MasterProfile } from "@/lib/types";
 import { getJob, upsertJob } from "@/lib/jobs-store";
 import { loadProfile } from "@/lib/profile-store";
 import { defaultCvFileName } from "@/lib/filename";
+import { cvText } from "@/lib/cv-text";
 import { mockAnalyze, mockAutoFit, withDelay } from "@/mock";
 import { CvPreview } from "./cv-preview";
-
-/** All text that is actually rendered on the CV — the live scan runs on this. */
-function cvText(p: MasterProfile): string {
-  const parts = [p.contact.fullName, p.contact.targetTitle, p.summary];
-  for (const e of p.experience)
-    parts.push(e.jobTitle, e.company, e.location, e.bullets.join(" "));
-  for (const prj of p.projects)
-    parts.push(prj.name, prj.techStack.join(" "), prj.bullets.join(" "));
-  for (const g of p.skillGroups) parts.push(g.skills.join(" "));
-  parts.push(p.education.map((ed) => [ed.degree, ed.major, ed.university, ed.location].join(" ")).join(" "));
-  for (const cert of p.certifications) parts.push(cert.name, cert.issuer);
-  return parts.join(" ").toLowerCase();
-}
 
 interface AnalysisBlockProps {
   analysis: GapAnalysis;
