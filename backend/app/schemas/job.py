@@ -75,5 +75,6 @@ class Job(BaseModel):
     cv: MasterProfileResponse
     fileName: Optional[str] = None
     analysis: GapAnalysis
+    aiUsed: bool = False
     rewrites: List[dict] = []
     tailored: Optional[dict] = None

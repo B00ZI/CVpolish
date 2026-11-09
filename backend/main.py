@@ -6,7 +6,7 @@ from app.core.database import Base, engine
 
 # Importing all model files here registers their tables BEFORE create_all.
 from app import models  # noqa: F401
-from app.routers.profile import router
+from app.routers import profile , job
 
 
 
@@ -14,7 +14,8 @@ from app.routers.profile import router
 app = FastAPI(title=settings.PROJECT_NAME)
 Base.metadata.create_all(bind=engine)
 
-app.include_router(router , prefix="/api/profile")
+app.include_router(profile.router , prefix="/api/profile")
+app.include_router(job.router , prefix="/api/jobs")
 
 app.add_middleware(
     CORSMiddleware,
@@ -28,3 +29,4 @@ app.add_middleware(
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
