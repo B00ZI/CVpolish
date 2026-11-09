@@ -111,17 +111,17 @@ def post_intelligence(lang: str, db: Session = Depends(get_db)):
         # Nothing stored -> nothing to extract; empty block, aiUsed false.
         return ExtractResponse(aiUsed=False, data=AiIntelligence())
 
-    new_intelligence = derive_intelligence(profile.data)
+    res = derive_intelligence(profile.data)
     profile.data = {
         **profile.data,
-        "aiIntelligence": new_intelligence.model_dump(),
+        "aiIntelligence": res.data.model_dump(),
     }
     db.commit()
     db.refresh(profile)
-    return ExtractResponse(aiUsed=False, data=new_intelligence)
+    return res
 
 
-def derive_intelligence(profile_data: dict) -> AiIntelligence:
+def derive_intelligence(profile_data: dict) -> ExtractResponse:
     """Non-AI extraction: keywords from skills + technologies + tech stacks.
 
     The AI path lands here later (step 4 of the plan): when
@@ -129,6 +129,8 @@ def derive_intelligence(profile_data: dict) -> AiIntelligence:
     through to this local version on ANY failure — the endpoint and the caller
     never change shape.
     """
+
+    ai_used = False
     groups = profile_data.get("skillGroups", [])
     experience = profile_data.get("experience", [])
     projects = profile_data.get("projects", [])
@@ -162,8 +164,11 @@ def derive_intelligence(profile_data: dict) -> AiIntelligence:
     if summary:
         summary += "."
 
-    return AiIntelligence(
+
+    newdata =  AiIntelligence(
         masterKeywords=keywords,
         baselineSummary=summary,
         lastExtractedAt=datetime.now(timezone.utc).isoformat(),
     )
+
+    return  ExtractResponse(aiUsed= ai_used  , data = newdata)
