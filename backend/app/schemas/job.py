@@ -51,7 +51,7 @@ class JobCard(BaseModel):
     description or the analysis object, only what the card renders."""
     id: str
     title: str
-    company: str = ""             # may be ""
+    company: str = ""            
     location: Optional[str] = None
     language: Language
     createdAt: str
