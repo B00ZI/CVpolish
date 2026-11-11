@@ -1,9 +1,9 @@
 """Profile endpoints — the whole Page 1 of backend/API.md:
 
-    GET    /api/profile/{lang}                    -> empty structure first time
-    PUT    /api/profile/{lang}                    -> full replace (autosave)
-    DELETE /api/profile/{lang}                    -> back to empty structure
-    POST   /api/profile/{lang}/extract-intelligence  (AI, always 200 +
+    GET    /api/profile                     -> empty structure first time
+    PUT    /api/profile                     -> full replace (autosave)
+    DELETE /api/profile                     -> back to empty structure
+    POST   /api/profile/extract-intelligence  (AI, always 200 +
     `aiUsed` fallback)
 
 Business logic goes in the endpoint bodies or small helper functions in this
@@ -26,7 +26,6 @@ from app.schemas.profile import (
 
 router = APIRouter()
 
-LANGS = ("en", "fr")
 
 
 # DB row -> the profile JSON the frontend expects; the updated_at COLUMN wins.
@@ -46,21 +45,14 @@ def empty_profile_response() -> MasterProfileResponse:
     )
 
 
-# Language guard: unknown string -> 404 (contract, not 422).
-def check_lang(lang: str) -> None:
-    if lang not in LANGS:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Unknown language '{lang}' — use 'en' or 'fr'.",
-        )
 
 
 # GET to get a profile
-@router.get("/{lang}", response_model=MasterProfileResponse)
-def get_profile(lang: str, db: Session = Depends(get_db)):
-    check_lang(lang)
+@router.get("", response_model=MasterProfileResponse)
+def get_profile(db: Session = Depends(get_db)):
+    
 
-    profile = db.query(Profile).filter(Profile.lang == lang).first()
+    profile = db.query(Profile).first()
     if profile is None:
         return empty_profile_response()
 
@@ -68,15 +60,15 @@ def get_profile(lang: str, db: Session = Depends(get_db)):
 
 
 # PUT to create or update a profile
-@router.put("/{lang}", response_model=MasterProfileResponse)
-def update_profile(data: ProfileBase, lang: str, db: Session = Depends(get_db)):
+@router.put("", response_model=MasterProfileResponse)
+def update_profile(data: ProfileBase, db: Session = Depends(get_db)):
     payload = data.model_dump()
-    check_lang(lang)
+    
 
-    profile = db.query(Profile).filter(Profile.lang == lang).first()
+    profile = db.query(Profile).first()
 
     if profile is None:
-        new_profile = Profile(lang=lang, data=payload)
+        new_profile = Profile(data=payload)
         db.add(new_profile)
         db.commit()
         db.refresh(new_profile)
@@ -89,11 +81,11 @@ def update_profile(data: ProfileBase, lang: str, db: Session = Depends(get_db)):
 
 
 # DELETE to remove a profile and answer with the empty state
-@router.delete("/{lang}", response_model=MasterProfileResponse)
-def delete_profile(lang: str, db: Session = Depends(get_db)):
-    check_lang(lang)
+@router.delete("", response_model=MasterProfileResponse)
+def delete_profile(db: Session = Depends(get_db)):
+    
 
-    profile = db.query(Profile).filter(Profile.lang == lang).first()
+    profile = db.query(Profile).first()
     if profile is None:
         return empty_profile_response()
 
@@ -102,13 +94,12 @@ def delete_profile(lang: str, db: Session = Depends(get_db)):
     return empty_profile_response()
 
 
-@router.post("/{lang}/extract-intelligence", response_model=ExtractResponse)
-def post_intelligence(lang: str, db: Session = Depends(get_db)):
-    check_lang(lang)
+@router.post("/extract-intelligence", response_model=ExtractResponse)
+def post_intelligence(db: Session = Depends(get_db)):
+   
 
-    profile = db.query(Profile).filter(Profile.lang == lang).first()
+    profile = db.query(Profile).first()
     if profile is None:
-        # Nothing stored -> nothing to extract; empty block, aiUsed false.
         return ExtractResponse(aiUsed=False, data=AiIntelligence())
 
     res = derive_intelligence(profile.data)

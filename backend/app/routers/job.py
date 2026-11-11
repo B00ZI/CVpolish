@@ -1,7 +1,11 @@
-"""Job endpoints — Page 2 of backend/API.md:
+"""Job endpoints — backend/API.md pages 2-3:
 
-    GET  /api/jobs  -> light JobCard list, newest first
-    POST /api/jobs  -> create the job: CV + analysis in the same response
+    GET    /api/jobs          -> light JobCard list, newest first
+    POST   /api/jobs          -> create the job: CV + analysis in one response
+    GET    /api/jobs/{id}     -> full job (workspace mount)
+    PATCH  /api/jobs/{id}     -> rename title/fileName, flip active language
+    PUT    /api/jobs/{id}/cv  -> autosave: replace cv or cvFr
+    DELETE /api/jobs/{id}     -> 204 (trash icon)
 
 The AI seam lives in `generate_job()`: today it runs the fallback
 (frozen profile copy + local analysis, aiUsed=False); the Gemini branch
@@ -142,23 +146,23 @@ def to_response_job(row: JobModel) -> Job:
         language=row.language,
         title=row.title,
         company=row.company,
-        location=None,
         description=row.description,
         createdAt=row.created_at.isoformat(),
         cv=row.cv,
+        cvFr=row.cv_fr,
         fileName=row.file_name,
         analysis=GapAnalysis(**row.analysis),
         aiUsed=row.ai_used,
     )
 
-# for the home page 
+# for the home page
 def to_card(row: JobModel) -> JobCard:
     return JobCard(
         id=row.id,
         title=row.title,
         company=row.company,
-        location=None,
         language=row.language,
+        hasFr= row.cv_fr is not None ,
         createdAt=row.created_at.isoformat(),
         score=row.analysis.get("score", 0),
         matchedCount=len(row.analysis.get("matched", [])),
@@ -184,7 +188,7 @@ def create_job(body: CreateJobRequest, db: Session = Depends(get_db)):
             detail="description can't be empty",
         )
 
-    profile = db.query(Profile).filter(Profile.lang == body.language).first()
+    profile = db.query(Profile).first()
     if profile is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -198,7 +202,7 @@ def create_job(body: CreateJobRequest, db: Session = Depends(get_db)):
 
     job = JobModel(
         id=f"job-{int(datetime.now(timezone.utc).timestamp() * 1000)}",
-        language=body.language,
+        language="en",
         title=generated["title"],
         company=generated["company"],
         description=body.description,  # verbatim, not the trimmed one
@@ -216,71 +220,84 @@ def create_job(body: CreateJobRequest, db: Session = Depends(get_db)):
 
 @router.get("/{id}", response_model=Job)
 def get_job(id : str , db: Session = Depends(get_db)):
-    
+
     job =  db.query(JobModel).filter(JobModel.id == id).first()
     if job is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"no job with id {id}",
             )
-    return to_response_job(job) 
+    return to_response_job(job)
+# rename title / fileName, flip the active language (EN/FR toggle)
 
-# to updat the jobtitle or file name 
-
-@router.patch("/{id}" , response_model=Job)
-def patch_job(id : str , body: PatchJobRequest, db: Session = Depends(get_db)):
-
-    
-  
-    
-    job =  db.query(JobModel).filter(JobModel.id == id).first()
-
+@router.patch("/{id}", response_model=Job)
+def patch_job(id: str, body: PatchJobRequest, db: Session = Depends(get_db)):
+    job = db.query(JobModel).filter(JobModel.id == id).first()
     if job is None:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"no job with id {id}",
-                )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"no job with id {id}",
+        )
 
+    if body.language == "fr" and job.cv_fr is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="no cvFr translate first",
+        )
     if body.title is not None and not body.title.strip():
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                    detail="title  can't be empty",
-                )
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="title can't be empty",
+        )
     if body.fileName is not None and not body.fileName.strip():
-                raise HTTPException(
-                        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                        detail=" filename can't be empty",
-                )
-    
-    if body.title is not None:
-         job.title = body.title
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="filename can't be empty",
+        )
 
+    if body.title is not None:
+        job.title = body.title
     if body.fileName is not None:
-         job.file_name = body.fileName     
+        job.file_name = body.fileName
+    if body.language is not None:
+        job.language = body.language
 
     db.commit()
     db.refresh(job)
     return to_response_job(job)
-    
 
 
 
 
+
+
+# autosave: replace the document the body asks for (else the active one)
 
 @router.put("/{id}/cv", response_model=MasterProfileResponse)
-def put_job_cv(id, body: JobCvBody, db:Session = Depends(get_db)):
-
-    job =  db.query(JobModel).filter(JobModel.id == id).first()
+def put_job_cv(id: str, body: JobCvBody, db: Session = Depends(get_db)):
+    job = db.query(JobModel).filter(JobModel.id == id).first()
     if job is None:
-                    raise HTTPException(
-                        status_code=status.HTTP_404_NOT_FOUND,
-                        detail=f"no job with id {id}",
-                    )
-    
-    job.cv = body.cv.model_dump()    
-    db.commit() 
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"no job with id {id}",
+        )
+
+    # One target, used for the guard, the write and the response.
+    which = body.language or job.language
+    if which == "fr" and job.cv_fr is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="no cvFr translate first",
+        )
+
+    dump = body.cv.model_dump()
+    if which == "fr":
+        job.cv_fr = dump
+    else:
+        job.cv = dump
+    db.commit()
     db.refresh(job)
-    return MasterProfileResponse(**job.cv)   
+    return MasterProfileResponse(**(job.cv_fr if which == "fr" else job.cv))
 
 
 
@@ -294,7 +311,7 @@ def delete_job(id: str, db: Session = Depends(get_db)) :
                         status_code=status.HTTP_404_NOT_FOUND,
                         detail=f"no job with id {id}",
                     )
-    
+
     db.delete(job)
     db.commit()
     return

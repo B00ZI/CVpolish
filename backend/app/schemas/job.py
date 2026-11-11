@@ -16,7 +16,7 @@ Language = Literal["en", "fr"]
 
 class CreateJobRequest(BaseModel):
     """Body of POST /api/jobs — create + analyze in one call."""
-    language: Language
+    
     # Empty-after-trim and the 50k cap are checked in the router (422).
     description: str = Field(min_length=1, max_length=50_000)
 
@@ -26,12 +26,16 @@ class PatchJobRequest(BaseModel):
     A field left out (None) means "don't touch it"."""
     title: Optional[str] = None
     fileName: Optional[str] = None
+    language:  Optional[Language] = None
 
 
 class JobCvBody(BaseModel):
     """Body of PUT /api/jobs/{id}/cv — the whole edited frozen CV,
-    full replace (same semantics as PUT /api/profile/{lang})."""
+    full replace. `language` picks which document is replaced
+    (omitted = the job's active one)."""
     cv: ProfileBase
+    language:  Optional[Language] = None
+
 
 
 # ---------- responses / data ----------
@@ -52,8 +56,9 @@ class JobCard(BaseModel):
     id: str
     title: str
     company: str = ""            
-    location: Optional[str] = None
+    
     language: Language
+    hasFr : bool 
     createdAt: str
     score: int
     matchedCount: int
@@ -62,20 +67,17 @@ class JobCard(BaseModel):
 
 
 class Job(BaseModel):
-    """The full job returned by POST /api/jobs, GET /api/jobs/{id} and PATCH.
-    rewrites/tailored are legacy fields kept only for old browser data —
-    the backend always sends them empty/null and never stores them."""
+    """The full job returned by POST /api/jobs, GET /api/jobs/{id} and PATCH."""
     id: str
     language: Language
     title: str
     company: str = ""
-    location: Optional[str] = None
+    
     description: str
     createdAt: str
     cv: MasterProfileResponse
-    cv_fr : MasterProfileResponse
+    cvFr : Optional[MasterProfileResponse] =  None 
     fileName: Optional[str] = None
     analysis: GapAnalysis
     aiUsed: bool = False
-    rewrites: List[dict] = []
-    tailored: Optional[dict] = None
+
