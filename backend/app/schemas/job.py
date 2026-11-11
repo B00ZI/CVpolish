@@ -73,6 +73,7 @@ class Job(BaseModel):
     description: str
     createdAt: str
     cv: MasterProfileResponse
+    cv_fr : MasterProfileResponse
     fileName: Optional[str] = None
     analysis: GapAnalysis
     aiUsed: bool = False

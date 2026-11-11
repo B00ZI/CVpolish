@@ -9,9 +9,10 @@ import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { BackLink, TopBar } from "@/components/top-bar";
-import type { GapAnalysis, Job, MasterProfile } from "@/lib/types";
+import type { GapAnalysis, Job, Language, MasterProfile } from "@/lib/types";
 import { getJob, upsertJob } from "@/lib/jobs-store";
 import { loadProfile } from "@/lib/profile-store";
 import { defaultCvFileName } from "@/lib/filename";
@@ -38,9 +39,11 @@ interface AnalysisBlockProps {
 
 export function Workspace({ jobId }: { jobId: string }) {
   const [job, setJob] = useState<Job | null | undefined>(undefined);
-  // profile === job.cv (the job's frozen CV) after load
+  // profile = the DISPLAYED CV document: job.cv (en) or job.cvFr (fr),
+  // whichever job.language says is active. Edits write back to that one.
   const [profile, setProfile] = useState<MasterProfile | null>(null);
   const [autofitting, setAutofitting] = useState(false);
+  const [translating, setTranslating] = useState(false);
   const hitTimer = useRef<number | null>(null);
 
   useEffect(() => {
@@ -71,18 +74,19 @@ export function Workspace({ jobId }: { jobId: string }) {
   // snapshot the profile / compute the analysis so everything is present,
   // then work on it.
   if (!j.cv || !j.analysis) {
-    const profile = j.cv ?? loadProfile(j.language);
+    const fallbackCv = j.cv ?? loadProfile();
     const next: Job = {
       ...j,
-      cv: profile,
-      analysis: j.analysis ?? mockAnalyze(j, profile),
+      cv: fallbackCv,
+      cvFr: j.cvFr ?? null,
+      analysis: j.analysis ?? mockAnalyze(j, fallbackCv),
     };
     upsertJob(next);
     setJob(next);
-    setProfile(next.cv);
+    setProfile(next.language === "fr" && next.cvFr ? next.cvFr : next.cv);
   } else {
     setJob(j);
-    setProfile(j.cv);
+    setProfile(j.language === "fr" && j.cvFr ? j.cvFr : j.cv);
   }
   }, [jobId]);
 
@@ -95,18 +99,46 @@ export function Workspace({ jobId }: { jobId: string }) {
     });
   }
 
-  /** Persist a CV edit (inline edits + quick add) into the job's frozen CV.
-   *  The master profile is untouched — other jobs and /profile stay as they
-   *  were when this job was created. */
+  /** Persist a CV edit (inline edits + quick add) into the DISPLAYED
+   *  document — job.cv when English is active, job.cvFr when French is.
+   *  The other version and the master profile stay untouched. */
   function updateProfile(fn: (p: MasterProfile) => MasterProfile) {
     if (!profile) return;
-    const cv = fn(profile);
-    setProfile(cv);
+    const doc = fn(profile);
+    setProfile(doc);
     setJob((prev) => {
       if (!prev) return prev;
-      const next = { ...prev, cv };
+      const next: Job =
+        prev.language === "fr" && prev.cvFr
+          ? { ...prev, cvFr: doc }
+          : { ...prev, cv: doc };
       upsertJob(next);
       return next;
+    });
+  }
+
+  /** EN/FR toggle: switch which saved version is shown (PATCH language).
+   *  FR only when a translation exists — otherwise the button translates. */
+  function switchLang(lang: Language) {
+    if (!job || job.language === lang) return;
+    if (lang === "fr" && !job.cvFr) return;
+    const shown = lang === "fr" ? job.cvFr : job.cv;
+    if (!shown) return;
+    mutate((j) => ({ ...j, language: lang }));
+    setProfile(shown);
+    clearHits();
+  }
+
+  /** Translate button (explicit, never automatic). Mock phase: honest
+   *  toast — the real POST /api/jobs/{id}/translate lands with the backend. */
+  async function translate() {
+    if (translating || !job) return;
+    setTranslating(true);
+    await withDelay(null, 1400);
+    setTranslating(false);
+    toast("AI translation", {
+      description:
+        "Needs the backend AI — POST /api/jobs/{id}/translate isn't wired in mock mode yet.",
     });
   }
 
@@ -275,7 +307,7 @@ export function Workspace({ jobId }: { jobId: string }) {
     updateProfile((p) => mockAutoFit(p, kws, job.language));
     setAutofitting(false);
     toast("AI fit done", {
-      description: `${kws.length} keyword${kws.length > 1 ? "s" : ""} woven into your bullets (mock POST /api/cv/integrate-missing).`,
+      description: `${kws.length} keyword${kws.length > 1 ? "s" : ""} woven into your bullets (mock POST /api/jobs/{id}/integrate-missing).`,
     });
   }
 
@@ -313,7 +345,17 @@ export function Workspace({ jobId }: { jobId: string }) {
             />
           </>
         }
-        right={<ThemeToggle />}
+        right={
+          <>
+            <LangToggle
+              job={job}
+              translating={translating}
+              onSwitch={switchLang}
+              onTranslate={translate}
+            />
+            <ThemeToggle />
+          </>
+        }
       />
 
       {/* Single view: two independent panes on desktop — the left panel
@@ -362,6 +404,59 @@ export function Workspace({ jobId }: { jobId: string }) {
           </div>
         </div>
       </main>
+    </div>
+  );
+}
+
+/** EN/FR switch for the CV's two versions. EN = source (always there),
+ *  FR = the translated copy (POST .../translate). Clicking FR with no copy
+ *  yet runs the translate action instead of switching. */
+function LangToggle({
+  job,
+  translating,
+  onSwitch,
+  onTranslate,
+}: {
+  job: Job;
+  translating: boolean;
+  onSwitch: (lang: Language) => void;
+  onTranslate: () => void;
+}) {
+  const frReady = Boolean(job.cvFr);
+  return (
+    <div className="flex overflow-hidden rounded-lg border border-border">
+      <button
+        type="button"
+        title="Show English CV"
+        onClick={() => onSwitch("en")}
+        className={cn(
+          "px-2.5 py-1 text-xs transition-colors",
+          job.language === "en"
+            ? "bg-muted font-medium text-foreground"
+            : "text-muted-foreground hover:text-foreground",
+        )}
+      >
+        EN
+      </button>
+      <button
+        type="button"
+        title={frReady ? "Show French CV" : "Translate to French (AI)"}
+        disabled={translating}
+        onClick={() => (frReady ? onSwitch("fr") : onTranslate())}
+        className={cn(
+          "flex items-center gap-1 px-2.5 py-1 text-xs transition-colors",
+          job.language === "fr"
+            ? "bg-muted font-medium text-foreground"
+            : "text-muted-foreground hover:text-foreground",
+          translating && "opacity-70",
+        )}
+      >
+        {translating ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+        FR
+        {!frReady && !translating ? (
+          <Sparkles className="h-3 w-3 text-blue-600" />
+        ) : null}
+      </button>
     </div>
   );
 }

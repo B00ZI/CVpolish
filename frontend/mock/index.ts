@@ -2,9 +2,9 @@
 //   import { mockProfile, mockJobs } from "@/mock";
 // Simulated latency helper for fake "AI" calls during the mock phase.
 
-export { mockProfile, mockProfileFr } from "./profile";
+export { mockProfile, mockCvFr } from "./profile";
 export { mockJobs } from "./jobs";
-export { mockAnalyze, mockRewrites, mockExtractIntelligence, mockAutoFit } from "./generate";
+export { mockAnalyze, mockExtractIntelligence, mockAutoFit } from "./generate";
 
 import type { Job } from "@/lib/types";
 import { mockJobs } from "./jobs";

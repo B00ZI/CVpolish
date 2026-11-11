@@ -41,10 +41,15 @@ export function loadJobs(): Job[] {
   const savedIds = new Set(saved.map((j) => j.id));
   const deleted = new Set(readTombstones());
   const all = [...saved, ...mockJobs.filter((m) => !savedIds.has(m.id))];
-  // Jobs saved before the language field existed default to English.
+  // Normalize old browser data: jobs saved before cvFr/aiUsed existed.
   return all
     .filter((j) => !deleted.has(j.id))
-    .map((j) => ({ ...j, language: j.language ?? "en" }));
+    .map((j) => ({
+      ...j,
+      language: j.language ?? "en",
+      cvFr: j.cvFr ?? null,
+      aiUsed: j.aiUsed ?? false,
+    }));
 }
 
 export function getJob(id: string): Job | undefined {

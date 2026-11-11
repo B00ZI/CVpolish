@@ -6,32 +6,21 @@ import { Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import type { Job, Language } from "@/lib/types";
+import type { Job } from "@/lib/types";
 import { loadProfile } from "@/lib/profile-store";
 import { upsertJob } from "@/lib/jobs-store";
 import { mockAnalyze, withDelay } from "@/mock";
 import { TopBar, BackLink } from "@/components/top-bar";
-import { cn } from "@/lib/utils";
-
-const LANGUAGES: {
-  value: Language;
-  label: string;
-  hint: string;
-}[] = [
-  { value: "en", label: "English", hint: "Uses your English profile" },
-  { value: "fr", label: "Français", hint: "Utilise ton profil français" },
-];
 
 export function NewJob() {
   const router = useRouter();
-  const [lang, setLang] = useState<Language | null>(null);
   const [description, setDescription] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const canAnalyze = lang !== null && description.trim().length > 0;
+  const canAnalyze = description.trim().length > 0;
 
   async function analyze() {
-    if (!canAnalyze || busy || lang === null) return;
+    if (!canAnalyze || busy) return;
     setBusy(true);
     // Title = the first meaningful line of the JD (strip markdown headings).
     const firstLine =
@@ -42,29 +31,26 @@ export function NewJob() {
     const title = firstLine.replace(/^#+\s*/, "").slice(0, 80);
     // The job owns its CV at creation time: the backend will generate it for
     // this JD (mock = a frozen copy of the profile); later profile edits never
-    // touch it.
-    const profile = loadProfile(lang);
+    // touch it. cvFr starts null — French arrives via the translate button.
+    const profile = loadProfile();
     const analysis = mockAnalyze({ title, description }, profile);
     const job: Job = {
       id: `job-${Date.now()}`,
-      language: lang,
+      language: "en",
       title,
       company: "",
       description,
       createdAt: new Date().toISOString(),
       cv: profile,
+      cvFr: null,
       analysis,
-      aiUsed: true, // mock: pretend the AI generation ran (backend swaps to real)
-      rewrites: [],
-      tailored: null,
+      aiUsed: false, // honest: mock froze the profile — real AI lands with the backend
     };
     await withDelay(null, 1400);
     upsertJob(job);
-    toast.success(
-      job.aiUsed
-        ? "AI-generated CV ready"
-        : "Generated without AI — edit manually",
-    );
+    toast.success("CV draft saved", {
+      description: "Mock mode — AI tailoring arrives with the backend.",
+    });
     router.push(`/jobs/${job.id}`);
   }
 
@@ -74,48 +60,13 @@ export function NewJob() {
       <TopBar left={<BackLink href="/">Your CVs</BackLink>} />
 
       <main className="mx-auto max-w-3xl px-6 pb-24 pt-10">
-        {lang === null ? (
-          <>
-            <h1 className="text-2xl font-medium tracking-tight">
-              First — which language is this CV for?
-            </h1>
-            <p className="mt-1.5 text-sm text-muted-foreground">
-              Each language uses its own profile database. You can maintain an
-              English and a French CV side by side.
-            </p>
-            <div className="mt-8 grid gap-4 sm:grid-cols-2">
-              {LANGUAGES.map((l) => (
-                <button
-                  key={l.value}
-                  onClick={() => setLang(l.value)}
-                  className="rounded-xl border border-border p-6 text-left transition-colors hover:border-foreground/25 hover:bg-muted/30"
-                >
-                  <p className="text-base font-medium">{l.label}</p>
-                  <p className="mt-1 text-sm text-muted-foreground">{l.hint}</p>
-                </button>
-              ))}
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="flex items-center justify-between gap-4">
-              <h1 className="text-2xl font-medium tracking-tight">
-                Job description
-              </h1>
-              <button
-                onClick={() => setLang(null)}
-                className={cn(
-                  "rounded-full border border-border px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-foreground/25 hover:text-foreground",
-                )}
-              >
-                {lang === "fr" ? "Français" : "English"} · Change
-              </button>
-            </div>
-            <p className="mt-1.5 text-sm text-muted-foreground">
-              One paste is enough — the title comes from the first line, and
-              the CV is tailored from your{" "}
-              {lang === "fr" ? "French" : "English"} profile.
-            </p>
+        <h1 className="text-2xl font-medium tracking-tight">
+          Job description
+        </h1>
+        <p className="mt-1.5 text-sm text-muted-foreground">
+          One paste is enough — the title comes from the first line, and the
+          CV is tailored from your profile.
+        </p>
 
         <div className="mt-8 space-y-5 rounded-xl border border-border p-6">
           <Textarea
@@ -139,8 +90,6 @@ export function NewJob() {
             </Button>
           </div>
         </div>
-          </>
-        )}
       </main>
     </div>
   );

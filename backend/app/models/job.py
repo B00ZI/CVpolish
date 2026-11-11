@@ -16,5 +16,6 @@ class Job(Base):
     file_name = Column(String, nullable=True)
     created_at = Column(DateTime, nullable=False, default=func.now())
     analysis = Column(JSONB, nullable=False)
+    cv_fr = Column(JSONB , nullable= True)
     cv = Column(JSONB, nullable=False)
     ai_used = Column(Boolean, nullable=False, default=False)

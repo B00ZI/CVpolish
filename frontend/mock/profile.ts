@@ -177,12 +177,10 @@ export const mockProfile: MasterProfile = {
   updatedAt: "2026-10-29T10:00:00.000Z",
 };
 
-// Same profile, fully in French — a separate "database" so a CV can be
-
-// Same profile, fully in French — a separate "database" so a CV can be
-// tailored in English or French. Same ids as the English mock, so
-// anything referencing an experience/project id works for both.
-export const mockProfileFr: MasterProfile = {
+// The French CV copy — NOT a profile. Kept only as the demo job's `cvFr`
+// (what the AI translate endpoint would produce). Same ids as the English
+// mock, so anything referencing an experience/project id works for both.
+export const mockCvFr: MasterProfile = {
   contact: {
     fullName: "Karim Alaoui",
     targetTitle: "Développeur Full-Stack",

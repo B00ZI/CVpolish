@@ -22,6 +22,9 @@ from app.schemas.job import (
     GapAnalysis,
     Job,
     JobCard,
+    PatchJobRequest,
+    MasterProfileResponse,
+    JobCvBody
 )
 
 router = APIRouter()
@@ -148,7 +151,7 @@ def to_response_job(row: JobModel) -> Job:
         aiUsed=row.ai_used,
     )
 
-
+# for the home page 
 def to_card(row: JobModel) -> JobCard:
     return JobCard(
         id=row.id,
@@ -207,3 +210,93 @@ def create_job(body: CreateJobRequest, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(job)
     return to_response_job(job)
+
+
+
+
+@router.get("/{id}", response_model=Job)
+def get_job(id : str , db: Session = Depends(get_db)):
+    
+    job =  db.query(JobModel).filter(JobModel.id == id).first()
+    if job is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"no job with id {id}",
+            )
+    return to_response_job(job) 
+
+# to updat the jobtitle or file name 
+
+@router.patch("/{id}" , response_model=Job)
+def patch_job(id : str , body: PatchJobRequest, db: Session = Depends(get_db)):
+
+    
+  
+    
+    job =  db.query(JobModel).filter(JobModel.id == id).first()
+
+    if job is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"no job with id {id}",
+                )
+
+    if body.title is not None and not body.title.strip():
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail="title  can't be empty",
+                )
+    if body.fileName is not None and not body.fileName.strip():
+                raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                        detail=" filename can't be empty",
+                )
+    
+    if body.title is not None:
+         job.title = body.title
+
+    if body.fileName is not None:
+         job.file_name = body.fileName     
+
+    db.commit()
+    db.refresh(job)
+    return to_response_job(job)
+    
+
+
+
+
+
+@router.put("/{id}/cv", response_model=MasterProfileResponse)
+def put_job_cv(id, body: JobCvBody, db:Session = Depends(get_db)):
+
+    job =  db.query(JobModel).filter(JobModel.id == id).first()
+    if job is None:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail=f"no job with id {id}",
+                    )
+    
+    job.cv = body.cv.model_dump()    
+    db.commit() 
+    db.refresh(job)
+    return MasterProfileResponse(**job.cv)   
+
+
+
+
+@router.delete("/{id}", status_code=204)
+def delete_job(id: str, db: Session = Depends(get_db)) :
+
+    job =  db.query(JobModel).filter(JobModel.id == id).first()
+    if job is None:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail=f"no job with id {id}",
+                    )
+    
+    db.delete(job)
+    db.commit()
+    return
+
+

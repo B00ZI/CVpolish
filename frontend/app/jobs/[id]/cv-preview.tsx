@@ -5,8 +5,8 @@ import { Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Job, Language, MasterProfile } from "@/lib/types";
 
-// CV template labels per language. The CV content itself comes from the
-// profile db in that language; these are just the fixed template strings.
+// CV template labels per language. The CV content is whatever version the
+// workspace displays (job.cv or job.cvFr); these are just template strings.
 const LABELS: Record<
   Language,
   {
@@ -243,7 +243,7 @@ export function CvPreview({
 }: {
   profile: MasterProfile;
   job: Job;
-  /** Persist an edit to the master profile. */
+  /** Persist an edit to the displayed CV document (cv or cvFr). */
   onEditProfile: (fn: (p: MasterProfile) => MasterProfile) => void;
 }) {
   const L = LABELS[job.language];

@@ -3,7 +3,7 @@ import { Workspace } from "./workspace";
 
 export const metadata: Metadata = {
   title: "Job workspace — CVPolish",
-  description: "Match, rewrite, and export a CV for this job.",
+  description: "Match, edit, translate, and export a CV for this job.",
 };
 
 // This route reads `params` at request time; opting out of prerender

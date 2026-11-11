@@ -166,7 +166,6 @@ export function Home() {
                     </p>
                     <p className="mt-0.5 truncate text-sm text-muted-foreground">
                       {job.company}
-                      {job.location ? ` · ${job.location}` : ""}
                     </p>
                   </div>
                   <div className="text-right">
@@ -199,7 +198,14 @@ export function Home() {
                       variant="outline"
                       className="px-1.5 text-[11px] text-muted-foreground"
                     >
-                      {job.language === "fr" ? "FR" : "EN"}
+                      {/* active version first; FR shown once translated */}
+                      {job.cvFr
+                        ? job.language === "fr"
+                          ? "FR · EN"
+                          : "EN · FR"
+                        : job.language === "fr"
+                          ? "FR"
+                          : "EN"}
                     </Badge>
                     <Button
                       variant="ghost"

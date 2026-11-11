@@ -4,12 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import type { Language, MasterProfile } from "@/lib/types";
+import type { MasterProfile } from "@/lib/types";
 import { profileCompleteness } from "@/lib/completeness";
 import { clearProfile, loadProfile, saveProfile } from "@/lib/profile-store";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { BackLink, TopBar } from "@/components/top-bar";
-import { mockProfile, mockProfileFr, mockExtractIntelligence, withDelay } from "@/mock";
+import { mockProfile, mockExtractIntelligence, withDelay } from "@/mock";
 import {
   CertificationsSection,
   ContactSection,
@@ -35,19 +35,17 @@ const SECTIONS = [
 export type Update = (fn: (p: MasterProfile) => MasterProfile) => void;
 
 export function ProfileEditor() {
-  const [lang, setLang] = useState<Language>("en");
   const [profile, setProfile] = useState<MasterProfile>(mockProfile);
   const [active, setActive] = useState<string>("contact");
   const [aiBusy, setAiBusy] = useState<string | null>(null);
   const loaded = useRef(false);
   const firstSave = useRef(true);
 
-  // Load the profile for the selected language db after mount
-  // (avoids hydration mismatch) and on every language switch.
+  // Load the profile after mount (avoids hydration mismatch).
   useEffect(() => {
-    setProfile(loadProfile(lang));
+    setProfile(loadProfile());
     loaded.current = true;
-  }, [lang]);
+  }, []);
 
   // Autosave to localStorage (the fake backend for now).
   useEffect(() => {
@@ -57,18 +55,10 @@ export function ProfileEditor() {
       return;
     }
     const t = setTimeout(() => {
-      saveProfile(profile, lang);
+      saveProfile(profile);
     }, 500);
     return () => clearTimeout(t);
-  }, [profile, lang]);
-
-  /** Swap database: flush pending edits to the current db, then load the other. */
-  function switchLang(next: Language) {
-    if (next === lang) return;
-    saveProfile(profile, lang);
-    setLang(next);
-    setProfile(loadProfile(next));
-  }
+  }, [profile]);
 
   // Scroll-spy for the side nav.
   useEffect(() => {
@@ -106,11 +96,11 @@ export function ProfileEditor() {
 
   function reset() {
     try {
-      clearProfile(lang);
+      clearProfile();
     } catch {
       // ignore
     }
-    setProfile(lang === "fr" ? mockProfileFr : mockProfile);
+    setProfile(mockProfile);
     toast("Reset", { description: "Back to the mock data." });
   }
 
@@ -126,23 +116,6 @@ export function ProfileEditor() {
         }
         right={
           <>
-            {/* Language db switcher: EN and FR are separate profiles */}
-            <div className="flex overflow-hidden rounded-lg border border-border">
-              {(["en", "fr"] as Language[]).map((l) => (
-                <button
-                  key={l}
-                  onClick={() => switchLang(l)}
-                  className={cn(
-                    "px-2.5 py-1 text-xs transition-colors",
-                    lang === l
-                      ? "bg-muted font-medium text-foreground"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {l === "en" ? "EN" : "FR"}
-                </button>
-              ))}
-            </div>
             <Button variant="ghost" size="sm" className="text-xs" onClick={reset}>
               Reset data
             </Button>
@@ -208,11 +181,11 @@ export function ProfileEditor() {
         <main className="min-w-0 flex-1 md:max-w-2xl">
           <header className="mb-2">
             <h1 className="text-2xl font-medium tracking-tight">
-              Your CV database — {lang === "fr" ? "Français" : "English"}
+              Your CV database
             </h1>
             <p className="mt-1.5 text-sm text-muted-foreground">
-              Everything here feeds every tailored CV in this language. Toggle
-              EN / FR up top to edit the other database.
+              Everything here feeds every tailored CV. One profile — the AI
+              translates a finished CV to French when you need it.
             </p>
           </header>
 

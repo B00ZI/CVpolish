@@ -2,7 +2,8 @@
 // Shaped like the future FastAPI responses: when the backend exists,
 // endpoints return exactly these JSON shapes and the swap from mock -> API is easy.
 
-// The app keeps two profile databases (EN + FR); every CV targets one.
+// ONE master profile (English source). "fr" only ever appears as a
+// translated copy of a job's CV — this says which CV version is active.
 export type Language = "en" | "fr";
 
 // ===== Master profile (the "CV database") =====
@@ -91,39 +92,23 @@ export interface GapAnalysis {
   added: string[];                   // missing keywords user forced in anyway
 }
 
-export interface RewriteDiff {
-  id: string;
-  section: "summary" | "experience" | "projects";
-  refId: string;               // id of the experience/project ("" for summary)
-  original: string;
-  rewritten: string;
-  accepted: boolean | null;    // null = not reviewed yet
-}
-
-export interface TailoredResult {
-  summary: string;             // rewritten for this job
-  experience: Experience[];    // rewritten bullets
-  projects: Project[];
-  generatedAt: string;         // ISO date
-}
-
 export interface Job {
   id: string;
-  language: Language;          // which profile db the CV is built from
+  language: Language;          // ACTIVE version shown/printed: "en" until translated
   title: string;               // job title
   company: string;
-  location?: string;
   description: string;         // raw pasted job description
   createdAt: string;           // ISO date
-  /** The job's own CV — AI-generated for this JD, or a frozen profile copy
-   *  when AI was unavailable. Edits live here, not in the profile. */
+  /** The job's SOURCE CV — English, editable. Edits live here, not in the
+   *  profile. On the backend this is the master document for translation. */
   cv: MasterProfile;
+  /** French copy — AI-translated once and saved (no re-pay on view).
+   *  null = never translated. Normalized to null on load for old data. */
+  cvFr: MasterProfile | null;
   /** PDF filename override; falls back to a computed default when unset. */
   fileName?: string;
-  analysis: GapAnalysis;       // always set — creation analyzes once, done
-  /** true = the CV was AI-generated/edited; false = no-AI fallback ran.
-   *  Optional: only old localStorage jobs (pre-backend) may lack it. */
+  analysis: GapAnalysis;       // always set — computed on `cv` at creation
+  /** true = AI generated/edited this CV; false = mock/fallback ran.
+   *  Optional on old localStorage data; normalized to false on load. */
   aiUsed?: boolean;
-  rewrites: RewriteDiff[];     // legacy, unused in the UI since 2026-11-04
-  tailored: TailoredResult | null;  // legacy, unused in the UI since 2026-11-04
 }

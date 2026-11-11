@@ -3,7 +3,6 @@ import type {
   Job,
   Language,
   MasterProfile,
-  RewriteDiff,
 } from "@/lib/types";
 import { analyzeForJob } from "@/lib/cv-text";
 
@@ -76,59 +75,4 @@ export function mockAutoFit(
       ],
     })),
   };
-}
-
-/** Fake rewrites: template-generated from the profile + job. */
-export function mockRewrites(job: Job, profile: MasterProfile): RewriteDiff[] {
-  const diffs: RewriteDiff[] = [];
-  const fr = job.language === "fr";
-
-  diffs.push({
-    id: `rw-summary-${job.id}`,
-    section: "summary",
-    refId: "",
-    original: profile.summary,
-    rewritten: fr
-      ? `${profile.contact.targetTitle} — profil orienté ${job.title}. ${profile.summary}`
-      : `${profile.contact.targetTitle} focused on ${job.title} work — ${profile.summary}`,
-    accepted: null,
-  });
-
-  const keywords = job.analysis?.matched.slice(0, 3).join(", ");
-
-  profile.experience.slice(0, 2).forEach((exp) => {
-    const bullet = exp.bullets[0];
-    if (bullet) {
-      diffs.push({
-        id: `rw-${exp.id}-${job.id}`,
-        section: "experience",
-        refId: exp.id,
-        original: bullet,
-        rewritten: keywords
-          ? fr
-            ? `${bullet} — appuyé par : ${keywords}`
-            : `${bullet} — applied ${keywords}`
-          : bullet,
-        accepted: null,
-      });
-    }
-  });
-
-  const project = profile.projects[0];
-  if (project?.bullets[0]) {
-    diffs.push({
-      id: `rw-${project.id}-${job.id}`,
-      section: "projects",
-      refId: project.id,
-      original: project.bullets[0],
-      rewritten: keywords
-        ? fr
-          ? `${project.bullets[0]} — adossé à : ${keywords}`
-          : `${project.bullets[0]} — backed by ${keywords}`
-        : project.bullets[0],
-      accepted: null,
-    });
-  }
-
-  return diffs;
 }
