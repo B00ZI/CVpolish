@@ -7,7 +7,7 @@ aikey = settings.GEMINI_API_KEY
 
 settings.GEMINI_API_KEY
 def call(prompt) -> str | None:
-    if aikey is None:
+    if aikey == "":
         return None
     
 
@@ -16,6 +16,6 @@ def call(prompt) -> str | None:
     response = client.models.generate_content(
     model='gemini-3.8-flash', contents=prompt
     )
-    return response
+    return response.text
 
     
