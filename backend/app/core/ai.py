@@ -5,17 +5,24 @@ from google.genai import types
 
 aikey = settings.GEMINI_API_KEY
 
-settings.GEMINI_API_KEY
 def call(prompt) -> str | None:
     if aikey == "":
         return None
-    
 
-    client = genai.Client(api_key=aikey)
+    try :
+           
+        client = genai.Client(
+            api_key=aikey , 
+             http_options=types.HttpOptions(timeout=10_000))
+        
+        response = client.models.generate_content(model='gemini-3.8-flash', contents=prompt)
+        return response.text
     
-    response = client.models.generate_content(
-    model='gemini-3.8-flash', contents=prompt
-    )
-    return response.text
+    except Exception as e :
+        print(e)
+        return None
+
+
+ 
 
     
