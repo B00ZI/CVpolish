@@ -13,9 +13,9 @@ def call(prompt) -> str | None:
            
         client = genai.Client(
             api_key=aikey , 
-             http_options=types.HttpOptions(timeout=10_000))
+             http_options=types.HttpOptions(timeout=20_000))
         
-        response = client.models.generate_content(model='gemini-3.8-flash', contents=prompt)
+        response = client.models.generate_content(model='gemini-3.5-flash-lite', contents=prompt)
         return response.text
     
     except Exception as e :
