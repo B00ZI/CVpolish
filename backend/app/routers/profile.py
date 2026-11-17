@@ -12,10 +12,13 @@ file; this router is where jobs routers will be added as siblings later
 """
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+import json
+
 from app.core.database import get_db
+from app.core.ai import call
 from app.models.profile import Profile
 from app.schemas.profile import (
     AiIntelligence,
@@ -103,6 +106,7 @@ def post_intelligence(db: Session = Depends(get_db)):
         return ExtractResponse(aiUsed=False, data=AiIntelligence())
 
     res = derive_intelligence(profile.data)
+
     profile.data = {
         **profile.data,
         "aiIntelligence": res.data.model_dump(),
@@ -113,15 +117,29 @@ def post_intelligence(db: Session = Depends(get_db)):
 
 
 def derive_intelligence(profile_data: dict) -> ExtractResponse:
-    """Non-AI extraction: keywords from skills + technologies + tech stacks.
 
-    The AI path lands here later (step 4 of the plan): when
-    settings.GEMINI_API_KEY is set, call the model inside try/except and fall
-    through to this local version on ANY failure — the endpoint and the caller
-    never change shape.
-    """
+    # using ai 
+    prompt = (
+    "Profile: " + json.dumps(profile_data) + "\n"
+    "Extract from it. Reply ONLY with raw JSON, no markdown/fences ignore the aiIntelligence field, "
+    'returned JSON exactly {"masterKeywords": [strings, max 15], "baselineSummary": "~100 words"}'
+        )
+    
+    text = call(prompt)
 
-    ai_used = False
+    try :
+        parsed = json.loads(text)
+        aiRes = AiIntelligence(
+            **parsed ,
+            lastExtractedAt=datetime.now(timezone.utc).isoformat())
+    except Exception :
+        aiRes = None
+
+    if aiRes :
+        return  ExtractResponse(aiUsed= True  , data = aiRes)
+
+
+    # fallback case no ai or ai failier 
     groups = profile_data.get("skillGroups", [])
     experience = profile_data.get("experience", [])
     projects = profile_data.get("projects", [])
@@ -129,8 +147,7 @@ def derive_intelligence(profile_data: dict) -> ExtractResponse:
     skill_words = [s for g in groups for s in g.get("skills", [])]
     tech_words = [t for e in experience for t in e.get("technologies", [])]
     stack_words = [t for p in projects for t in p.get("techStack", [])]
-
-    # First-come order, dedupe, cap at 15.
+    
     keywords = [
         k
         for k in dict.fromkeys(skill_words + tech_words + stack_words)
@@ -162,4 +179,4 @@ def derive_intelligence(profile_data: dict) -> ExtractResponse:
         lastExtractedAt=datetime.now(timezone.utc).isoformat(),
     )
 
-    return  ExtractResponse(aiUsed= ai_used  , data = newdata)
+    return  ExtractResponse(aiUsed= False  , data = newdata)
