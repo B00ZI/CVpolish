@@ -296,9 +296,12 @@ the UI renders them as click-to-edit placeholders.
 
 This is the consistency guarantee of the whole app. The frontend lives in
 `lib/cv-text.ts` (`cvText()` + `analyzeForJob()`), the backend creation
-analysis in `analyze_for_job()` — both must produce the SAME numbers for the
-same CV + JD. This block is the specification both sides copy from — if it
-ever changes, change both sides in the same commit.
+analysis in `analyze_for_job()` — Rule 1 + Rules 4-5 must produce the SAME
+numbers on both sides for the same CV + required set. `analyzeForJob()`
+in the frontend implements the Rule 3 fallback filter (it runs in mock
+phase only); on the AI path the required set comes from #6's model and is
+stored in the analysis (`matched ∪ missing` — Rule 5 re-checks exactly
+that). If the contract ever changes, change both sides in the same commit.
 
 **Rule 1 — the text to scan** (`cv_text`): concatenate exactly these fields
 into one string, lowercased (`"React"` → `"react"`). Nothing else.
@@ -316,13 +319,24 @@ for each certification : name + issuer
 does since the 2026-11-09 decision — a tech listed under a job's
 technologies counts as "on the CV".)
 
-**Rule 2 — the keyword universe** is `aiIntelligence.masterKeywords`
-(~15, extracted on the profile page). Words outside this list never appear
-in matched/missing, no matter how often the JD repeats them.
+**Rule 2 — where `required` comes from** (Option B, decided 2026-11-17):
+at creation the source depends on the path —
 
-**Rule 3 — required** = the master keywords that appear in the JD text
-(case-insensitive substring). A keyword the JD never mentions can't be
-required, so it's neither matched nor missing.
+- **AI path (#6):** the model reads the JD and returns `requiredKeywords`
+  — the concrete skills/tools/practices the JD demands. Cleaned (strings,
+  stripped, deduped, ≤20) and used as-is; no substring filter on top.
+- **Fallback (no key / any AI failure):** Rule 3's filter below.
+
+Words outside the required set never appear in matched/missing. The AI
+path exists to close the fallback's blind spot: a JD keyword the profile
+never claimed (so it isn't in `masterKeywords`) is invisible on Rule 3 but
+shows up as missing when the model reads it straight from the JD.
+
+**Rule 3 — fallback filter** = the master keywords
+(`aiIntelligence.masterKeywords`, extracted on the profile page) that
+appear in the JD text (case-insensitive substring). A keyword the JD never
+mentions can't be required on this path, so it's neither matched nor
+missing.
 
 **Rule 4 — matched vs missing** (against `cv_text`, Rule 1):
 
@@ -476,17 +490,19 @@ Requirements:
 1. `PUT /api/profile` with the JSON above → `200`, fresh `updatedAt`
 2. `GET /api/profile` → same profile back
 3. `POST /api/jobs` `{"description": "<JD above>"}` → **do this BEFORE
-   extract-intelligence**: the scan universe is the `masterKeywords` saved
-   in step 1 (incl. `Agile`)
+   extract-intelligence** (on the fallback path the required set comes
+   from the `masterKeywords` saved in step 1, incl. `Agile`)
    - **fallback expected** (no key): `aiUsed: false`, `cv` = profile
      verbatim, title = "Frontend Developer at Northwind Labs — Remote"
      (first line, ≤80 chars), company = ""
    - expected analysis: required = {react, typescript, next.js, tailwind
      css, git, agile} → `matched` = React, TypeScript, Next.js, Tailwind
      CSS, Git (5), `missing` = ["Agile"], `score` = **83**
-   - **with a key**: `aiUsed: true`, `cv` visibly rewritten for the JD
-     (same analysis numbers — the model's opinion is never trusted without
-     the substring check)
+   - **with a key**: `aiUsed: true`, `cv` visibly rewritten for the JD,
+     title/company detected, `required` = the model's `requiredKeywords`
+     read from the JD — for this JD expect the same 6 keywords → same
+     **83** (the model's opinion about *matches* is never trusted without
+     the substring check; only its reading of the JD is used)
 4. `POST /api/jobs/{id}/translate` `{"target":"fr"}`:
    - no key → `{"aiUsed": false, "cvFr": null, "language": "en"}`
    - with key → `cvFr` = French copy (structure/ids intact, dates
@@ -576,10 +592,16 @@ Requirements:
        numbers or skills — if a JD keyword has no factual base it stays
        out (it then shows as a missing chip, which is the app's point)
      - also return `title` (from the JD) and `company` (detect if present)
-     - new entry ids: mint `exp-*` / `prj-*` (idiom of the app)
+     - also return `requiredKeywords` — the JD's concrete demands
+       (short skill/tool/practice strings, not sentences); this is the
+       `required` set for Rule 2 (Option B, 2026-11-17)
+     - entry ids must be the profile's existing `exp-*` / `prj-*` ids —
+       entries with unknown ids are dropped (the never-invent check)
   3. **Analyze** the generated CV per 4b through the same
-     `cv_text()` + `analyze_for_job()` helpers the fallback uses — never the
-     model's opinion without a substring check
+     `cv_text()` + `analyze_for_job()` helpers the fallback uses —
+     `required` = the model's `requiredKeywords` (AI path) or Rule 3's
+     filter (fallback) — never the model's opinion about matches without
+     the substring check
   4. `createdAt = now`, `language = "en"`, `cvFr = null`, `fileName` unset
   5. Insert with `ai_used = true`, return the full `Job` → `201`
 - **Fallback (exists today):** same steps except step 2 freezes the profile
@@ -754,7 +776,7 @@ above falls through to one of these on failure:
 | #6 create job | the freeze path in `generate_job()` in `app/routers/job.py` — profile copy + `analyze_for_job()` + first-line title |
 | #11 integrate | return the document unchanged, `aiUsed: false` |
 | #12 translate | return existing `cvFr` (or null), `aiUsed: false` |
-| scan (both sides) | `cv_text()` / `analyze_for_job()` — no AI at all, ever |
+| scan (both sides) | `cv_text()` / `analyze_for_job()` — the comparison never uses AI, ever (only the *input* `required` list may come from #6's model; the fallback filter is `masterKeywords ∩ JD`) |
 
 The rule going forward: **no new fallback features.** A fallback is a
 `try/except` around a new AI call that lands on a row above — nothing more.

@@ -13,7 +13,8 @@ lands inside exactly that function later — the endpoints never change.
 """
 import re
 from datetime import datetime, timezone
-
+from app.core.ai import call
+import json 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -30,6 +31,7 @@ from app.schemas.job import (
     MasterProfileResponse,
     JobCvBody
 )
+from app.schemas.profile import Experience, Project
 
 router = APIRouter()
 
@@ -80,17 +82,22 @@ def cv_text(cv_data: dict) -> str:
     return " ".join(parts).lower()
 
 
-def analyze_for_job(jd_text: str, cv_data: dict) -> GapAnalysis:
-    """Rules 2-4 — universe/masterKeywords, required in the JD,
-    matched vs missing against cv_text, score."""
-    jd = jd_text.lower()
+def analyze_for_job(
+    jd_text: str, cv_data: dict, required: list[str] | None = None
+) -> GapAnalysis:
+    """Rules 2-4 — required (Option B: the list #6's model extracted from
+    the JD; fallback = master keywords found in the JD), matched vs missing
+    against cv_text, score."""
     text = cv_text(cv_data)
 
-    required = [
-        k
-        for k in cv_data.get("aiIntelligence", {}).get("masterKeywords", [])
-        if k.lower() in jd
-    ]
+    if required is None:
+        jd = jd_text.lower()
+        required = [
+            k
+            for k in cv_data.get("aiIntelligence", {}).get("masterKeywords", [])
+            if k.lower() in jd
+        ]
+
     matched = [k for k in required if k.lower() in text]
     missing = [k for k in required if k.lower() not in text]
     total = len(matched) + len(missing) or 1
@@ -110,30 +117,128 @@ def analyze_for_job(jd_text: str, cv_data: dict) -> GapAnalysis:
 def generate_job(body: CreateJobRequest, profile_data: dict) -> dict:
     """The ONE place the job's CV is born.
 
-    Fallback (today, aiUsed=False): freeze the profile copy as-is, detect the
-    title from the first JD line, analyze locally.
-
-    AI branch (added later, same return keys): when settings.GEMINI_API_KEY is
-    set, generate the tailored CV here — contact/education/certifications
-    verbatim, summary/experience/projects rewritten from the real entries
-    (drop irrelevant, order by relevance, never invent) — then fall through
-    to the exact same analyze_for_job() verification on ANY failure.
+    AI branch (ai_used=True): the model reads profile + JD and returns
+    {title, company, summary, requiredKeywords, experience, projects};
+    code merges the verbatim parts, drops any entry whose id isn't in the
+    profile (never-invent), then runs the SAME analyze_for_job()
+    verification with required = the model's list (Option B, 4b).
+    Fallback (no key / any failure, ai_used=False): freeze the profile
+    copy, title from the first JD line, required = master keywords in the
+    JD. Never raises.
     """
-    cv = {**profile_data}
-
     first_line = next(
         (l.strip() for l in body.description.splitlines() if l.strip()), ""
     )
-    title = re.sub(r"^#+\s*", "", first_line)[:80]
+    detected_title = re.sub(r"^#+\s*", "", first_line)[:80]
 
-    analysis = analyze_for_job(body.description, cv)
+    cv = {**profile_data}
+    title = detected_title
+    company = ""
+    required = None
+    ai_used = False
+
+    try:
+        prompt = (
+            "You are tailoring one candidate's CV to one specific job "
+            "description.\nReturn ONLY raw JSON — no markdown, no code "
+            "fences, no commentary.\n\n"
+            "## Job description\n" + body.description + "\n\n"
+            "## Candidate profile (the ONLY source of facts — never invent "
+            "anything outside it)\n" + json.dumps(profile_data) + "\n\n"
+            "## Return exactly this JSON structure\n"
+            "{\n"
+            '  "title": "<job title, read from the JD heading/first line>",\n'
+            '  "company": "<company name if the JD explicitly states one, '
+            'else empty string>",\n'
+            '  "summary": "<80-120 word professional summary rewritten for '
+            'THIS job>",\n'
+            '  "requiredKeywords": ["<skill terms this JD demands, as short '
+            'strings>"],\n'
+            "  \"experience\": [ <some of the profile's experience entries, "
+            "see rules> ],\n"
+            "  \"projects\": [ <some of the profile's projects entries, see "
+            "rules> ]\n"
+            "}\n\n"
+            "## Hard rules\n"
+            "1. You return ONLY title, company, summary, requiredKeywords, "
+            "experience, projects. Everything else in the profile (contact, "
+            "education, certifications, skillGroups, aiIntelligence) is "
+            "copied by the code — never echo it, never change it.\n"
+            "2. experience and projects: reuse ONLY entries that exist in "
+            "the profile, keeping each entry's original \"id\". Drop entries "
+            "irrelevant to this JD. Reorder the rest by relevance to the "
+            "JD.\n"
+            "3. Rewrite summary and bullets to fit the JD's language — but "
+            "every number, employer, project, date, degree and skill must "
+            "come from the profile. NEVER invent or exaggerate.\n"
+            "4. If the JD demands a skill the profile cannot support with "
+            "real facts, leave it out of the CV — it is supposed to show as "
+            "a missing keyword.\n"
+            "5. requiredKeywords: list the concrete skills/tools/practices "
+            "this JD demands (React, Agile, code review…), NOT sentences "
+            "from the JD.\n"
+            "6. company: only if explicitly named in the JD; otherwise "
+            "empty string.\n"
+        )
+        text = call(prompt)
+        raw = json.loads(text)
+        if not isinstance(raw, dict):
+            raise ValueError("reply is not a JSON object")
+
+        summary = raw.get("summary")
+        title_raw = raw.get("title")
+        company_raw = raw.get("company")
+        if not isinstance(summary, str) or not summary.strip():
+            raise ValueError("bad summary")
+        if not isinstance(title_raw, str) or not isinstance(company_raw, str):
+            raise ValueError("bad title/company")
+
+        exp_ids = {e.get("id") for e in profile_data.get("experience", [])}
+        prj_ids = {p.get("id") for p in profile_data.get("projects", [])}
+        exps_raw, prjs_raw = raw.get("experience"), raw.get("projects")
+        if not isinstance(exps_raw, list) or not isinstance(prjs_raw, list):
+            raise ValueError("experience/projects must be lists")
+        exps = [e for e in (Experience(**x) for x in exps_raw) if e.id in exp_ids]
+        prjs = [p for p in (Project(**x) for x in prjs_raw) if p.id in prj_ids]
+        # Model broke the reuse rule if nothing usable came back while the
+        # profile has entries — don't ship an empty-handed CV.
+        if profile_data.get("experience") and not exps:
+            raise ValueError("no reusable experience")
+        if profile_data.get("projects") and not prjs:
+            raise ValueError("no reusable projects")
+
+        cv = {
+            **profile_data,
+            "summary": summary.strip(),
+            "experience": [e.model_dump() for e in exps],
+            "projects": [p.model_dump() for p in prjs],
+        }
+        title = title_raw.strip() or detected_title
+        company = company_raw.strip()
+
+        req_raw = raw.get("requiredKeywords")
+        if isinstance(req_raw, list):
+            cleaned = list(
+                dict.fromkeys(str(x).strip() for x in req_raw if str(x).strip())
+            )
+            required = cleaned[:20] or None
+        ai_used = True
+    except Exception as e:
+        print(e)
+        ai_used = False
+        cv = {**profile_data}
+        title = detected_title
+        company = ""
+        required = None
+
+    analysis = analyze_for_job(body.description, cv, required)
 
     return {
         "cv": cv,
         "title": title,
-        "company": "",
+        "company": company,
         "analysis": analysis,
-        "ai_used": False,
+        "ai_used": ai_used,
     }
 
 
