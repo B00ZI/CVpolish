@@ -97,3 +97,12 @@ class TranslateResponse(BaseModel):
     cvFr: Optional[MasterProfileResponse] = None
     language: Language
 
+class IntegrateMissingRequest(BaseModel):
+    keywords: list[str]                      # the missing ones
+    prompts: list[str]                       # one user note per keyword
+    language: Optional[Language] = None      # omitted = job's active version
+
+class IntegrateMissingResponse(BaseModel):
+    aiUsed: bool
+    cv: MasterProfileResponse                # both docs back, one unchanged
+    cvFr: Optional[MasterProfileResponse] = None
