@@ -15,8 +15,8 @@ explicitly say "do it for me").
       1. ai.py helper (call the AI) ................. DONE
       2. #4 extract (keywords from profile) ......... DONE
       3. #6 generate CV (THE product) + Option B .... DONE
-      4. #12 translate to French .................... NEXT
-      5. #11 "Ask AI" missing keywords .............. not started
+      4. #12 translate to French .................... DONE
+      5. #11 "Ask AI" missing keywords .............. NEXT
 - [ ] Connect frontend to real API (swap fetch) ........... not started
 - [ ] Polish + demo deploy ............................... not started
 
@@ -34,28 +34,32 @@ explicitly say "do it for me").
   proven too. Option B decided: the AI reads the required keywords from the
   JD, code still does all the matched/missing math (scan stays free and
   identical on both sides).
+- 2026-11-17: #12 translate works — POST translate {target:"fr"} → AI
+  translates every string to French (ids + tech names + timestamps untouched,
+  endDate null → "Aujourd'hui"), saved as cvFr, language flips to fr;
+  second call is the cache (0.14 s, no model call); force re-runs the model;
+  both fallback paths (no copy yet / force with AI dead) return cleanly with
+  aiUsed: false and nothing changed.
 
 ## RIGHT NOW (the one thing)
-**#12 translate — POST /api/jobs/{id}/translate (API.md — cache rule FIRST).**
-1. Cache rule (quota safety — "I'm broke"): if the job already has cvFr
-   and body.force is not true → return the SAVED cvFr with aiUsed: false,
-   NO model call. A French CV is paid for once.
-2. AI path: load cv → ask Gemini to translate every string to French, keep
-   JSON structure + all ids + tech names (React, Docker…) untouched, dates
-   localized ("Feb 2023" → "févr. 2023", endDate null → "Aujourd'hui")
-   → validate with Pydantic → save cvFr, set language = "fr" → 200.
-3. Fallback (no key / fail): cvFr unchanged (or null), aiUsed: false,
-   language unchanged. Never 500.
+**#11 integrate-missing — POST /api/jobs/{id}/integrate-missing (API.md).**
+The "Ask AI" button under the missing-keyword chips.
+1. Body: {keywords: [...], prompts: [one per keyword], language: "en"|"fr"}.
+   language = which CV to edit: en → cv, fr → cv_fr (fr with no cvFr → 422,
+   same rule as PUT cv).
+2. AI path: read the active CV → ask Gemini to weave each keyword into an
+   existing experience/project bullet, using the user's prompt as context,
+   never inventing facts → validate → save that CV → 200 {aiUsed: true, cv,
+   cvFr} (both docs back, the other one unchanged).
+3. Fallback (no key / fail): active CV unchanged, aiUsed: false, same shape.
+   Never 500.
 
-Test against :8000: create a job → POST translate {target:"fr"} →
-aiUsed true + cvFr French + language fr → repeat the same POST →
-aiUsed false (cache, no model call) → {target:"fr", force:true} →
-aiUsed true again. With no key → aiUsed false, nothing changes.
+Test against :8000: job with missing chips → POST keywords+prompts →
+aiUsed true, each keyword now inside a bullet (live scan flips it green),
+other CV untouched → repeat with AI dead → aiUsed false, nothing changed.
 
 ## Next after that (in order)
-1. #11 integrate-missing: weave the missing keywords into the active CV
-2. Swap frontend from mock data to real fetch calls
-3. Polish + deploy so I can put a live link on my own CV
+1. Swap frontend from mock data to real fetch calls
 
 ## Golden rules (never break)
 - Free AI only (Gemini free tier). No paid anything.

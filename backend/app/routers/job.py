@@ -29,7 +29,9 @@ from app.schemas.job import (
     JobCard,
     PatchJobRequest,
     MasterProfileResponse,
-    JobCvBody
+    JobCvBody,
+    TranslateRequest,
+    TranslateResponse
 )
 from app.schemas.profile import Experience, Project
 
@@ -405,6 +407,94 @@ def put_job_cv(id: str, body: JobCvBody, db: Session = Depends(get_db)):
     return MasterProfileResponse(**(job.cv_fr if which == "fr" else job.cv))
 
 
+
+
+# AI translate (API.md #12) — cache rule FIRST: a French CV is paid once.
+@router.post("/{id}/translate", response_model=TranslateResponse)
+def translate_job(id: str, body: TranslateRequest, db: Session = Depends(get_db)):
+    job = db.query(JobModel).filter(JobModel.id == id).first()
+    if job is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"no job with id {id}",
+        )
+    if body.target != "fr":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail='only target "fr" is supported',
+        )
+
+    # Existing copy + no force -> hand it back, flip the view, no model call.
+    if job.cv_fr is not None and not body.force:
+        job.language = "fr"
+        db.commit()
+        db.refresh(job)
+        return TranslateResponse(
+            aiUsed=False, cvFr=MasterProfileResponse(**job.cv_fr), language="fr"
+        )
+
+    source = job.cv or {}
+    try:
+        prompt = (
+            "You translate a CV from English to French.\n"
+            "Return ONLY raw JSON — no markdown, no code fences, no "
+            "commentary.\n\n"
+            "## English CV (source)\n" + json.dumps(source) + "\n\n"
+            "## Rules\n"
+            "1. Translate every human-readable string to natural French: "
+            "summary, job titles, bullets, skill group categories, degree, "
+            "project descriptions, locations (\"Casablanca, Morocco\" -> "
+            "\"Casablanca, Maroc\").\n"
+            "2. Keep EXACTLY as they are: every \"id\" value; urls, emails "
+            "and phone numbers; tech/product names (React, Next.js, Docker, "
+            "PostgreSQL...); and the machine timestamps updatedAt and "
+            "lastExtractedAt.\n"
+            "3. Keep the JSON structure identical — same keys, same nesting, "
+            "same entries in the same order. Never drop, add or reorder "
+            "anything.\n"
+            "4. Dates inside text: English month names become French "
+            "abbreviations (\"Feb 2023\" -> \"févr. 2023\"). A null endDate "
+            "becomes the string \"Aujourd'hui\".\n"
+        )
+        text = call(prompt)
+        raw = json.loads(text)
+        translated = MasterProfileResponse(**raw)  # shape must survive
+        data = translated.model_dump()
+
+        # Structure guard: ids are never translated, so the id lists must be
+        # identical — catches empty/crippled replies before they get stored.
+        if [e.get("id") for e in source.get("experience", [])] != [
+            e.get("id") for e in data.get("experience", [])
+        ]:
+            raise ValueError("experience structure changed")
+        if [p.get("id") for p in source.get("projects", [])] != [
+            p.get("id") for p in data.get("projects", [])
+        ]:
+            raise ValueError("projects structure changed")
+
+        # Code wins on machine fields — never trust the model with them.
+        data["updatedAt"] = source.get("updatedAt")
+        if isinstance(data.get("aiIntelligence"), dict):
+            data["aiIntelligence"]["lastExtractedAt"] = (
+                (source.get("aiIntelligence") or {}).get("lastExtractedAt")
+            )
+
+        job.cv_fr = data            # JSONB: reassign, never mutate in place
+        job.language = "fr"
+        db.commit()
+        db.refresh(job)
+        return TranslateResponse(
+            aiUsed=True, cvFr=MasterProfileResponse(**data), language="fr"
+        )
+    except Exception as e:
+        print(e)
+        db.rollback()
+        # Fallback: hand back whatever exists, language untouched. Never 500.
+        return TranslateResponse(
+            aiUsed=False,
+            cvFr=MasterProfileResponse(**job.cv_fr) if job.cv_fr else None,
+            language=job.language,
+        )
 
 
 @router.delete("/{id}", status_code=204)

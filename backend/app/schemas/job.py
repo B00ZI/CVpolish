@@ -37,6 +37,14 @@ class JobCvBody(BaseModel):
     language:  Optional[Language] = None
 
 
+class TranslateRequest(BaseModel):
+    """Body of POST /api/jobs/{id}/translate. Only "fr" in v1 (router 422s
+    anything else). `force: true` skips the cache rule and re-runs the
+    model — it OVERWRITES the existing cvFr."""
+    target: str = "fr"
+    force: bool = False
+
+
 
 # ---------- responses / data ----------
 
@@ -80,4 +88,12 @@ class Job(BaseModel):
     fileName: Optional[str] = None
     analysis: GapAnalysis
     aiUsed: bool = False
+
+
+class TranslateResponse(BaseModel):
+    """Body of POST /api/jobs/{id}/translate — small by design: the client
+    adopts these three fields directly, it does not re-fetch the Job."""
+    aiUsed: bool
+    cvFr: Optional[MasterProfileResponse] = None
+    language: Language
 
