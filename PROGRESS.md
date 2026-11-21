@@ -45,6 +45,11 @@ explicitly say "do it for me").
   block bad model replies (structure ids, locked contact/education/certs,
   machine timestamps code-wins), fallback returns the doc unchanged.
   Step (c) — ALL FIVE AI pieces done.
+- 2026-11-17: full backend audit → 3 fixes: home-card score now recomputes
+  on every CV write (was frozen at creation), job ids can't collide
+  anymore, PUT profile can't silently erase the extracted keywords.
+  Known leftovers (deliberate): 6 small doc-vs-code wording drifts, AI
+  extract not capped at 15 (fallback still is).
 
 ## RIGHT NOW (the one thing)
 **Frontend swap — replace mock data with real fetch calls (API.md §6).**

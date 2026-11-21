@@ -70,6 +70,13 @@ def update_profile(data: ProfileBase, db: Session = Depends(get_db)):
 
     profile = db.query(Profile).first()
 
+    # Seatbelt: a body that omits aiIntelligence must not erase the
+    # extracted keywords — Pydantic would silently fill the default.
+    if profile is not None and "aiIntelligence" not in data.model_fields_set:
+        payload["aiIntelligence"] = profile.data.get(
+            "aiIntelligence", payload["aiIntelligence"]
+        )
+
     if profile is None:
         new_profile = Profile(data=payload)
         db.add(new_profile)

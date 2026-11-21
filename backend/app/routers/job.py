@@ -13,6 +13,7 @@ lands inside exactly that function later — the endpoints never change.
 """
 import re
 from datetime import datetime, timezone
+from uuid import uuid4
 from app.core.ai import call
 import json 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -310,7 +311,7 @@ def create_job(body: CreateJobRequest, db: Session = Depends(get_db)):
     generated = generate_job(body, frozen)
 
     job = JobModel(
-        id=f"job-{int(datetime.now(timezone.utc).timestamp() * 1000)}",
+        id=f"job-{int(datetime.now(timezone.utc).timestamp() * 1000)}-{uuid4().hex[:8]}",
         language="en",
         title=generated["title"],
         company=generated["company"],
@@ -404,6 +405,12 @@ def put_job_cv(id: str, body: JobCvBody, db: Session = Depends(get_db)):
         job.cv_fr = dump
     else:
         job.cv = dump
+        # Fresh score: same math, required = the stored matched+missing set
+        # (the union never changes, so Rule 5's stored set stays valid).
+        # sorted+set: same state always stores the same order, ever.
+        old = job.analysis or {}
+        required = sorted(set(old.get("matched", [])) | set(old.get("missing", [])))
+        job.analysis = analyze_for_job(job.description, dump, required).model_dump()
     db.commit()
     db.refresh(job)
     return MasterProfileResponse(**(job.cv_fr if which == "fr" else job.cv))
@@ -561,9 +568,17 @@ def integrate_missing(id: str, body: IntegrateMissingRequest, db: Session = Depe
              )
 
          if which == "fr":
-               job.cv_fr = data 
+               job.cv_fr = data
          else:
                job.cv = data
+               # Fresh score on the EN doc — same rule as PUT .../cv.
+               old = job.analysis or {}
+               required = sorted(
+                   set(old.get("matched", [])) | set(old.get("missing", []))
+               )
+               job.analysis = analyze_for_job(
+                   job.description, data, required
+               ).model_dump()
 
          if [e.get("id") for e in source.get("experience", [])] != [
                      e.get("id") for e in data.get("experience", [])
