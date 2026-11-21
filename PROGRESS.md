@@ -17,7 +17,7 @@ explicitly say "do it for me").
       3. #6 generate CV (THE product) + Option B .... DONE
       4. #12 translate to French .................... DONE
       5. #11 "Ask AI" (free-text CV edit) ........... DONE
-- [ ] Connect frontend to real API (swap fetch) ........... NEXT
+- [x] Connect frontend to real API (swap fetch) ............. DONE
 - [ ] Polish + demo deploy ............................... not started
 
 ## Done so far (short version)
@@ -50,24 +50,18 @@ explicitly say "do it for me").
   anymore, PUT profile can't silently erase the extracted keywords.
   Known leftovers (deliberate): 6 small doc-vs-code wording drifts, AI
   extract not capped at 15 (fallback still is).
+- 2026-11-17: FRONTEND SWAP DONE — every screen now talks to the real
+  backend (lib/api.ts fetch helper + NEXT_PUBLIC_API_URL in compose).
+  localStorage + mock/ folder deleted. New: JobCard list type, debounced
+  PUT for CV edits (flushes before AI calls and on navigate-away),
+  aiUsed-aware toasts everywhere. Verified end-to-end in a real browser:
+  create (AI) → quick-add persists → translate (AI) → Ask AI (AI) →
+  home card → profile autosave/extract/reset — 0 console problems,
+  tsc + next build clean.
 
 ## RIGHT NOW (the one thing)
-**Frontend swap — replace mock data with real fetch calls (API.md §6).**
-The backend is complete: 12 endpoints, all AI branches tested. Every screen
-still reads/writes localStorage + mock generators. Swap map (API.md §6):
-- `lib/profile-store.ts` → GET/PUT /api/profile
-- `lib/jobs-store.ts` → GET /api/jobs, GET/PATCH/PUT/DELETE /api/jobs/{id}
-- `mockAnalyze()` → POST /api/jobs
-- `mockExtractIntelligence()` → POST /api/profile/extract-intelligence
-- `mockAutoFit()` → POST /api/jobs/{id}/integrate-missing
-- translate toast → POST /api/jobs/{id}/translate
-- delete `withDelay()` fake spinners — real latency
-- add NEXT_PUBLIC_API_URL (.env → docker-compose) so the browser can reach
-  :8000
-
-Done when: same screens, same states, spinners driven by real requests,
-and a full flow works end-to-end with the backend up (create → scan →
-Ask AI → translate → edit → print).
+**Polish + demo deploy** — loading states, error messages, dark mode,
+then a deploy so this can go on my own CV with a live link.
 
 ## Next after that (in order)
 1. Polish + deploy so I can put a live link on my own CV
@@ -87,4 +81,7 @@ Ask AI → translate → edit → print).
 - Backend logs:            docker logs cvpolish-backend-1
 - Frontend type check:     npx.cmd tsc --noEmit   (in frontend/)
 - After .env change:       docker compose up -d   (env loads at start only)
+- After frontend edits
+  without watch running:   docker compose build frontend; docker compose up -d frontend
+  (plain `up -d` serves the OLD image — source only syncs under `watch`)
 - My notes for the AI:     AGENTS.md (the AI reads that one)

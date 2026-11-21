@@ -47,7 +47,5 @@ export function analyzeForJob(jdText: string, profile: MasterProfile): GapAnalys
     score: Math.round((matched.length / total) * 100),
     matched,
     missing,
-    notes: {},
-    added: [],
   };
 }

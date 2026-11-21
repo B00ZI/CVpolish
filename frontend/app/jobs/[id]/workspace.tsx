@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Check, FileText, Loader2, Printer, Sparkles } from "lucide-react";
+import { Check, FileText, Loader2, Printer, Sparkles, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,15 +13,23 @@ import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { BackLink, TopBar } from "@/components/top-bar";
 import type { GapAnalysis, Job, Language, MasterProfile } from "@/lib/types";
-import { getJob, upsertJob } from "@/lib/jobs-store";
-import { loadProfile } from "@/lib/profile-store";
+import {
+  getJob,
+  integrateJob,
+  patchJob,
+  putCv,
+  translateJob,
+} from "@/lib/jobs-store";
+import { errMsg } from "@/lib/api";
 import { defaultCvFileName } from "@/lib/filename";
 import { cvText } from "@/lib/cv-text";
-import { mockAnalyze, mockAutoFit, withDelay } from "@/mock";
 import { CvPreview } from "./cv-preview";
 
 interface AnalysisBlockProps {
   analysis: GapAnalysis;
+  /** Did the AI actually generate this CV (true) or did the fallback
+   *  freeze the profile as-is (false)? Drives the green/red status pill. */
+  aiUsed: boolean;
   /** Required keywords present on the CV right now (live scan, 0 API). */
   matchedLive: string[];
   /** Required keywords absent from the CV. */
@@ -44,12 +52,51 @@ export function Workspace({ jobId }: { jobId: string }) {
   const [profile, setProfile] = useState<MasterProfile | null>(null);
   const [autofitting, setAutofitting] = useState(false);
   const [translating, setTranslating] = useState(false);
+  // Brief emerald ring around the sheet after an AI action — shows WHERE
+  // the content changed.
+  const [cvFlash, setCvFlash] = useState(false);
+  const flashTimer = useRef<number | null>(null);
   const hitTimer = useRef<number | null>(null);
+  // Debounced PUT of the edited CV document (inline edits + quick add).
+  const saveTimer = useRef<number | null>(null);
+  const pendingSave = useRef<{ doc: MasterProfile; lang: Language } | null>(null);
+
+  function flashCv() {
+    setCvFlash(true);
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+    flashTimer.current = window.setTimeout(() => setCvFlash(false), 2200);
+  }
+
+  /** Push the latest pending edit to the server (if any). AI actions await
+   *  this first so they never read a stale document. */
+  function flushSave(): Promise<void> {
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    const pending = pendingSave.current;
+    if (!pending) return Promise.resolve();
+    pendingSave.current = null;
+    return putCv(jobId, pending.doc, pending.lang)
+      .then(() => undefined)
+      .catch((e) => {
+        toast.error("Couldn't save the CV", { description: errMsg(e) });
+      });
+  }
+
+  function scheduleSave(doc: MasterProfile, lang: Language) {
+    pendingSave.current = { doc, lang };
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = window.setTimeout(() => void flushSave(), 700);
+  }
 
   useEffect(() => {
     return () => {
       if (hitTimer.current) clearTimeout(hitTimer.current);
+      if (flashTimer.current) clearTimeout(flashTimer.current);
+      void flushSave(); // don't lose the last edit on navigate-away
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /** Remove active highlight classes from the CV. */
@@ -63,58 +110,53 @@ export function Workspace({ jobId }: { jobId: string }) {
     hitTimer.current = null;
   }
 
+  // Load the job from the backend (404/network error → not-found screen).
   useEffect(() => {
-    const j = getJob(jobId);
-    if (!j) {
-      setJob(null);
-      setProfile(null);
-      return;
-    }
-  // One-time migration: old jobs may have no frozen CV and/or no analysis —
-  // snapshot the profile / compute the analysis so everything is present,
-  // then work on it.
-  if (!j.cv || !j.analysis) {
-    const fallbackCv = j.cv ?? loadProfile();
-    const next: Job = {
-      ...j,
-      cv: fallbackCv,
-      cvFr: j.cvFr ?? null,
-      analysis: j.analysis ?? mockAnalyze(j, fallbackCv),
+    let alive = true;
+    getJob(jobId)
+      .then((j) => {
+        if (!alive) return;
+        setJob(j);
+        setProfile(j.language === "fr" && j.cvFr ? j.cvFr : j.cv);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setJob(null);
+        setProfile(null);
+      });
+    return () => {
+      alive = false;
     };
-    upsertJob(next);
-    setJob(next);
-    setProfile(next.language === "fr" && next.cvFr ? next.cvFr : next.cv);
-  } else {
-    setJob(j);
-    setProfile(j.language === "fr" && j.cvFr ? j.cvFr : j.cv);
-  }
   }, [jobId]);
 
-  function mutate(fn: (j: Job) => Job) {
-    setJob((prev) => {
-      if (!prev) return prev;
-      const next = fn(prev);
-      upsertJob(next);
-      return next;
-    });
+  /** Optimistic small field change (title / fileName / language) + PATCH. */
+  function patch(fields: {
+    title?: string;
+    fileName?: string;
+    language?: Language;
+  }) {
+    setJob((prev) => (prev ? { ...prev, ...fields } : prev));
+    patchJob(jobId, fields).catch((e) =>
+      toast.error("Couldn't save", { description: errMsg(e) }),
+    );
   }
 
   /** Persist a CV edit (inline edits + quick add) into the DISPLAYED
    *  document — job.cv when English is active, job.cvFr when French is.
-   *  The other version and the master profile stay untouched. */
+   *  The other version and the master profile stay untouched.
+   *  Debounced PUT; the server recomputes the analysis on write. */
   function updateProfile(fn: (p: MasterProfile) => MasterProfile) {
-    if (!profile) return;
+    if (!profile || !job) return;
     const doc = fn(profile);
+    const lang = job.language;
     setProfile(doc);
     setJob((prev) => {
       if (!prev) return prev;
-      const next: Job =
-        prev.language === "fr" && prev.cvFr
-          ? { ...prev, cvFr: doc }
-          : { ...prev, cv: doc };
-      upsertJob(next);
-      return next;
+      return lang === "fr" && prev.cvFr
+        ? { ...prev, cvFr: doc }
+        : { ...prev, cv: doc };
     });
+    scheduleSave(doc, lang);
   }
 
   /** EN/FR toggle: switch which saved version is shown (PATCH language).
@@ -124,22 +166,41 @@ export function Workspace({ jobId }: { jobId: string }) {
     if (lang === "fr" && !job.cvFr) return;
     const shown = lang === "fr" ? job.cvFr : job.cv;
     if (!shown) return;
-    mutate((j) => ({ ...j, language: lang }));
+    patch({ language: lang });
     setProfile(shown);
     clearHits();
   }
 
-  /** Translate button (explicit, never automatic). Mock phase: honest
-   *  toast — the real POST /api/jobs/{id}/translate lands with the backend. */
+  /** Translate button (explicit, never automatic) → POST translate.
+   *  Cached server-side: an existing French copy comes back for free. */
   async function translate() {
     if (translating || !job) return;
     setTranslating(true);
-    await withDelay(null, 1400);
-    setTranslating(false);
-    toast("AI translation", {
-      description:
-        "Needs the backend AI — POST /api/jobs/{id}/translate isn't wired in mock mode yet.",
-    });
+    try {
+      await flushSave(); // AI must read the latest edits
+      const r = await translateJob(job.id);
+      setJob((prev) =>
+        prev ? { ...prev, cvFr: r.cvFr, language: r.language } : prev,
+      );
+      if (r.language === "fr" && r.cvFr) setProfile(r.cvFr);
+      if (r.aiUsed) {
+        flashCv();
+        toast.success("French version ready", {
+          description:
+            "AI translated it once and saved it — free to view from now on.",
+        });
+      } else {
+        toast.error("No AI — French version not created", {
+          description: r.cvFr
+            ? "Kept your existing French copy. Nothing changed."
+            : "Nothing was changed. Try again in a moment.",
+        });
+      }
+    } catch (e) {
+      toast.error("Translate failed", { description: errMsg(e) });
+    } finally {
+      setTranslating(false);
+    }
   }
 
   // ===== Live scan: every keyword (matched + missing) re-checked against
@@ -192,8 +253,8 @@ export function Workspace({ jobId }: { jobId: string }) {
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-6 text-center">
         <h1 className="text-lg font-medium">Job not found</h1>
         <p className="max-w-sm text-sm text-muted-foreground">
-          This CV lives in the browser it was created in. Start a new one from
-          a job description.
+          This CV isn&apos;t on the server (or the backend is down). Start a
+          new one from a job description.
         </p>
         <Button asChild variant="outline">
           <Link href="/">Back to your CVs</Link>
@@ -296,19 +357,34 @@ export function Workspace({ jobId }: { jobId: string }) {
     }));
   }
 
-  /** Bulk AI fit: the user prompts how the missing keywords should be
-   *  woven in; mock for POST /api/cv/integrate-missing (Gemini). */
+  /** "Ask AI": one free-text prompt → POST integrate-missing against the
+   *  ACTIVE document. Fallback leaves the CV untouched (aiUsed: false). */
   async function autoFit(prompt: string) {
     if (autofitting || missingLive.length === 0 || !job) return;
     setAutofitting(true);
-    const kws = missingLive;
-    await withDelay(null, 1800);
-    void prompt; // real backend sends this as part of the request body
-    updateProfile((p) => mockAutoFit(p, kws, job.language));
-    setAutofitting(false);
-    toast("AI fit done", {
-      description: `${kws.length} keyword${kws.length > 1 ? "s" : ""} woven into your bullets (mock POST /api/jobs/{id}/integrate-missing).`,
-    });
+    try {
+      await flushSave(); // AI must read the latest edits
+      const r = await integrateJob(job.id, prompt, job.language);
+      setJob((prev) =>
+        prev ? { ...prev, cv: r.cv, cvFr: r.cvFr } : prev,
+      );
+      const doc = job.language === "fr" ? r.cvFr : r.cv;
+      if (doc) setProfile(doc);
+      if (r.aiUsed) {
+        flashCv();
+        toast.success("AI applied your edit", {
+          description: "Check the CV — your prompt was woven in.",
+        });
+      } else {
+        toast.error("No AI — CV unchanged", {
+          description: "Edit it manually or try again in a moment.",
+        });
+      }
+    } catch (e) {
+      toast.error("AI edit failed", { description: errMsg(e) });
+    } finally {
+      setAutofitting(false);
+    }
   }
 
   /** Print with the CV's filename pre-set — Chrome's "Save as PDF" uses the
@@ -337,11 +413,11 @@ export function Workspace({ jobId }: { jobId: string }) {
             <span aria-hidden className="block h-4 w-px bg-border" />
             <JobTitlePopover
               job={job}
-              onSave={(title) => mutate((j) => ({ ...j, title }))}
+              onSave={(title) => patch({ title })}
             />
             <FileChip
               job={job}
-              onSave={(name) => mutate((j) => ({ ...j, fileName: name }))}
+              onSave={(name) => patch({ fileName: name })}
             />
           </>
         }
@@ -368,6 +444,7 @@ export function Workspace({ jobId }: { jobId: string }) {
               {job.analysis ? (
                 <AnalysisBlock
                   analysis={job.analysis}
+                  aiUsed={job.aiUsed ?? false}
                   matchedLive={matchedLive}
                   missingLive={missingLive}
                   score={score}
@@ -400,7 +477,14 @@ export function Workspace({ jobId }: { jobId: string }) {
           {/* ===== Right: the live CV — scrolls independently; padding keeps
               the sheet from ending at the pane's bottom edge ===== */}
           <div className="min-w-0 pb-24 pr-6 print:h-auto print:overflow-visible print:pb-0 lg:h-full lg:overflow-y-auto">
-            <CvPreview profile={profile} job={job} onEditProfile={updateProfile} />
+            <div
+              className={cn(
+                "mx-auto w-fit rounded-lg transition-all duration-500",
+                cvFlash && "ring-2 ring-emerald-500/70",
+              )}
+            >
+              <CvPreview profile={profile} job={job} onEditProfile={updateProfile} />
+            </div>
           </div>
         </div>
       </main>
@@ -588,6 +672,7 @@ function FileChip({
 
 function AnalysisBlock({
   analysis,
+  aiUsed,
   matchedLive,
   missingLive,
   score,
@@ -612,8 +697,33 @@ function AnalysisBlock({
 
   return (
     <>
-      {/* Score — updates live as keywords land in the CV */}
-      <div className="flex items-center gap-6 rounded-xl border border-border p-6">
+      {/* Score card — the AI status banner says plainly who wrote this CV */}
+      <div className="overflow-hidden rounded-xl border border-border">
+        <div
+          className={cn(
+            "flex items-start gap-2.5 border-b px-5 py-3 text-sm",
+            aiUsed
+              ? "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-100"
+              : "border-red-200 bg-red-50 text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-100",
+          )}
+        >
+          {aiUsed ? (
+            <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+          ) : (
+            <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
+          )}
+          <div className="min-w-0">
+            <p className="font-medium">
+              {aiUsed ? "AI tailored this CV" : "No AI — profile copied as-is"}
+            </p>
+            <p className="mt-0.5 text-xs opacity-80">
+              {aiUsed
+                ? "Summary and bullets were rewritten for this job description."
+                : "The AI didn't run (no key, quota or error). This is your profile, unchanged."}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-6 p-6">
         <div className="text-center">
           <p className="text-4xl font-medium tabular-nums tracking-tight">
             {score}%
@@ -631,6 +741,7 @@ function AnalysisBlock({
             {matchedLive.length} covered · {missingLive.length} missing
             keywords
           </p>
+        </div>
         </div>
       </div>
 
@@ -678,7 +789,7 @@ function AnalysisBlock({
               ))}
             </div>
 
-            {/* Ask AI — user-written prompt, one mocked call for all keywords */}
+            {/* Ask AI — user-written prompt, one call for all keywords */}
             <div className="mt-5 rounded-xl border border-dashed border-border p-3">
               {!askAi ? (
                 <button

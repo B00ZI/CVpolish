@@ -39,6 +39,9 @@ services:
     build: ./frontend
     ports:
       - "3000:3000"
+    environment:
+      # Inlined into client code at dev-server start / build time.
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
     depends_on:
       - backend
     develop:

@@ -7,6 +7,7 @@ import Link from "next/link";
 import {
   ArrowRight,
   Check,
+  Loader2,
   Plus,
   Trash2,
   TriangleAlert,
@@ -22,13 +23,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { Job, MasterProfile } from "@/lib/types";
+import type { JobCard, MasterProfile } from "@/lib/types";
+import { cn } from "@/lib/utils";
 import { profileCompleteness } from "@/lib/completeness";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { TopBar } from "@/components/top-bar";
-import { loadProfile } from "@/lib/profile-store";
+import { emptyProfile, loadProfile } from "@/lib/profile-store";
 import { deleteJob, loadJobs } from "@/lib/jobs-store";
-import { mockJobs, mockProfile } from "@/mock";
+import { errMsg } from "@/lib/api";
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", {
@@ -39,26 +41,43 @@ function formatDate(iso: string): string {
 }
 
 export function Home() {
-  const [profile, setProfile] = useState<MasterProfile>(mockProfile);
-  const [jobs, setJobs] = useState<Job[]>(mockJobs);
-  const [deleteTarget, setDeleteTarget] = useState<Job | null>(null);
+  const [profile, setProfile] = useState<MasterProfile | null>(null);
+  const [jobs, setJobs] = useState<JobCard[] | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<JobCard | null>(null);
 
-  // Load saved profile + jobs after mount (avoids hydration mismatch).
+  // Load profile + job cards after mount (avoids hydration mismatch).
   useEffect(() => {
-    setProfile(loadProfile());
-    setJobs(loadJobs());
+    let alive = true;
+    loadProfile()
+      .then((p) => alive && setProfile(p))
+      .catch(() => alive && setProfile(emptyProfile()));
+    loadJobs()
+      .then((js) => alive && setJobs(js))
+      .catch((e) => {
+        if (!alive) return;
+        setJobs([]);
+        toast.error("Can't reach the backend", { description: errMsg(e) });
+      });
+    return () => {
+      alive = false;
+    };
   }, []);
 
-  const completeness = profileCompleteness(profile);
+  const completeness = profileCompleteness(profile ?? emptyProfile());
 
-  function confirmDelete() {
+  async function confirmDelete() {
     if (!deleteTarget) return;
-    deleteJob(deleteTarget.id);
-    setJobs((prev) => prev.filter((j) => j.id !== deleteTarget.id));
-    toast("CV deleted", {
-      description: `"${deleteTarget.title}" was removed.`,
-    });
+    const target = deleteTarget;
     setDeleteTarget(null);
+    try {
+      await deleteJob(target.id);
+      setJobs((prev) => prev?.filter((j) => j.id !== target.id) ?? null);
+      toast("CV deleted", {
+        description: `"${target.title}" was removed.`,
+      });
+    } catch (e) {
+      toast.error("Delete failed", { description: errMsg(e) });
+    }
   }
 
   return (
@@ -131,7 +150,12 @@ export function Home() {
         )}
 
         {/* CV cards */}
-        {jobs.length === 0 ? (
+        {jobs === null ? (
+          <div className="mt-8 flex items-center justify-center gap-2 rounded-xl border border-dashed border-border p-12 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading your CVs…
+          </div>
+        ) : jobs.length === 0 ? (
           <div className="mt-8 rounded-xl border border-dashed border-border p-12 text-center">
             <h2 className="text-base font-medium">No CVs yet</h2>
             <p className="mx-auto mt-1.5 max-w-sm text-sm text-muted-foreground">
@@ -170,36 +194,54 @@ export function Home() {
                   </div>
                   <div className="text-right">
                     <p className="text-2xl font-medium tabular-nums tracking-tight">
-                      {job.analysis ? `${job.analysis.score}%` : "—"}
+                      {job.score}%
                     </p>
                     <p className="text-xs text-muted-foreground">match</p>
                   </div>
                 </div>
 
-                {job.analysis ? (
-                  <div className="mt-4 flex items-center gap-4 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1.5">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                      {job.analysis.matched.length} matched
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                      {job.analysis.missing.length} missing
-                    </span>
-                  </div>
-                ) : null}
+                <div className="mt-4 flex items-center gap-4 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                    {job.matchedCount} matched
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                    {job.missingCount} missing
+                  </span>
+                </div>
 
                 <div className="mt-4 flex items-center justify-between border-t border-border pt-3">
                   <span className="text-xs text-muted-foreground">
                     {formatDate(job.createdAt)}
                   </span>
                   <div className="relative flex items-center gap-1.5">
+                    {/* AI status — appears once the server's JobCard
+                        carries aiUsed (it doesn't yet). */}
+                    {job.aiUsed !== undefined ? (
+                      <Badge
+                        variant="outline"
+                        title={
+                          job.aiUsed
+                            ? "AI tailored this CV"
+                            : "Fallback — profile copied as-is"
+                        }
+                        className={cn(
+                          "px-1.5 text-[11px]",
+                          job.aiUsed
+                            ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-400"
+                            : "border-red-300 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-400",
+                        )}
+                      >
+                        {job.aiUsed ? "AI" : "No AI"}
+                      </Badge>
+                    ) : null}
                     <Badge
                       variant="outline"
                       className="px-1.5 text-[11px] text-muted-foreground"
                     >
                       {/* active version first; FR shown once translated */}
-                      {job.cvFr
+                      {job.hasFr
                         ? job.language === "fr"
                           ? "FR · EN"
                           : "EN · FR"

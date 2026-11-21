@@ -1,6 +1,6 @@
 // Types for the whole app.
-// Shaped like the future FastAPI responses: when the backend exists,
-// endpoints return exactly these JSON shapes and the swap from mock -> API is easy.
+// Shaped exactly like the FastAPI responses (backend/API.md): the frontend
+// fetches these JSON shapes directly.
 
 // ONE master profile (English source). "fr" only ever appears as a
 // translated copy of a job's CV — this says which CV version is active.
@@ -88,8 +88,6 @@ export interface GapAnalysis {
   score: number;                     // match % (matched / total * 100)
   matched: string[];                 // keywords you already have
   missing: string[];                 // keywords the job wants, you lack
-  notes: Record<string, string>;     // keyword -> user context ("used in capstone")
-  added: string[];                   // missing keywords user forced in anyway
 }
 
 export interface Job {
@@ -108,7 +106,43 @@ export interface Job {
   /** PDF filename override; falls back to a computed default when unset. */
   fileName?: string;
   analysis: GapAnalysis;       // always set — computed on `cv` at creation
-  /** true = AI generated/edited this CV; false = mock/fallback ran.
-   *  Optional on old localStorage data; normalized to false on load. */
+  /** true = AI generated/edited this CV; false = fallback ran (no key/quota). */
   aiUsed?: boolean;
+}
+
+/** Light card list from GET /api/jobs — never ships cv/description/analysis;
+ *  counts come pre-computed from the stored analysis. */
+export interface JobCard {
+  id: string;
+  title: string;
+  company: string;
+  language: Language;
+  hasFr: boolean;               // cvFr exists → home shows "EN · FR"
+  createdAt: string;
+  score: number;
+  matchedCount: number;
+  missingCount: number;
+  fileName?: string | null;
+  /** AI used when this CV was created. The server's JobCard does NOT send
+   *  it yet — the home badge lights up automatically once it does. */
+  aiUsed?: boolean;
+}
+
+// ===== API response bodies (small, adopt-as-is) =====
+
+export interface ExtractResponse {
+  aiUsed: boolean;
+  data: AiIntelligence;
+}
+
+export interface TranslateResponse {
+  aiUsed: boolean;
+  cvFr: MasterProfile | null;
+  language: Language;
+}
+
+export interface IntegrateResponse {
+  aiUsed: boolean;
+  cv: MasterProfile;
+  cvFr: MasterProfile | null;
 }

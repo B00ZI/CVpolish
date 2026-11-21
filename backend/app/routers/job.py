@@ -157,7 +157,7 @@ def generate_job(body: CreateJobRequest, profile_data: dict) -> dict:
             'else empty string>",\n'
             '  "summary": "<80-120 word professional summary rewritten for '
             'THIS job>",\n'
-            '  "requiredKeywords": ["<skill terms this JD demands, as short '
+            '  "requiredKeywords": ["<skilles the Jd requires this is importent it shulde return all skilles acv requires  '
             'strings>"],\n'
             "  \"experience\": [ <some of the profile's experience entries, "
             "see rules> ],\n"
@@ -226,7 +226,7 @@ def generate_job(body: CreateJobRequest, profile_data: dict) -> dict:
             cleaned = list(
                 dict.fromkeys(str(x).strip() for x in req_raw if str(x).strip())
             )
-            required = cleaned[:20] or None
+            required = cleaned or None
         ai_used = True
     except Exception as e:
         print(e)

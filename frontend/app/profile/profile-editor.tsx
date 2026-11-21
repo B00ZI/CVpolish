@@ -6,10 +6,16 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { MasterProfile } from "@/lib/types";
 import { profileCompleteness } from "@/lib/completeness";
-import { clearProfile, loadProfile, saveProfile } from "@/lib/profile-store";
+import {
+  clearProfile,
+  emptyProfile,
+  extractIntelligence,
+  loadProfile,
+  saveProfile,
+} from "@/lib/profile-store";
+import { errMsg } from "@/lib/api";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { BackLink, TopBar } from "@/components/top-bar";
-import { mockProfile, mockExtractIntelligence, withDelay } from "@/mock";
 import {
   CertificationsSection,
   ContactSection,
@@ -35,7 +41,7 @@ const SECTIONS = [
 export type Update = (fn: (p: MasterProfile) => MasterProfile) => void;
 
 export function ProfileEditor() {
-  const [profile, setProfile] = useState<MasterProfile>(mockProfile);
+  const [profile, setProfile] = useState<MasterProfile>(emptyProfile);
   const [active, setActive] = useState<string>("contact");
   const [aiBusy, setAiBusy] = useState<string | null>(null);
   const loaded = useRef(false);
@@ -43,11 +49,24 @@ export function ProfileEditor() {
 
   // Load the profile after mount (avoids hydration mismatch).
   useEffect(() => {
-    setProfile(loadProfile());
-    loaded.current = true;
+    let alive = true;
+    loadProfile()
+      .then((p) => {
+        if (!alive) return;
+        setProfile(p);
+        loaded.current = true;
+      })
+      .catch((e) => {
+        if (!alive) return;
+        loaded.current = true;
+        toast.error("Can't reach the backend", { description: errMsg(e) });
+      });
+    return () => {
+      alive = false;
+    };
   }, []);
 
-  // Autosave to localStorage (the fake backend for now).
+  // Autosave: debounced PUT of the whole profile.
   useEffect(() => {
     if (!loaded.current) return;
     if (firstSave.current) {
@@ -55,7 +74,9 @@ export function ProfileEditor() {
       return;
     }
     const t = setTimeout(() => {
-      saveProfile(profile);
+      saveProfile(profile).catch((e) =>
+        toast.error("Couldn't save your profile", { description: errMsg(e) }),
+      );
     }, 500);
     return () => clearTimeout(t);
   }, [profile]);
@@ -82,26 +103,54 @@ export function ProfileEditor() {
 
   const update: Update = (fn) => setProfile((p) => fn(p));
 
-  // Mock AI call — real one arrives with the backend (step 4).
-  async function runAi(name: string) {
-    setAiBusy(name);
-    await withDelay(null, 1400);
-    setAiBusy(null);
-    toast("Mock AI", {
-      description: "Real generation arrives once the backend is connected.",
+  // Summary rewrite has no backend endpoint yet — stay honest instead of
+  // faking a spinner (AI is never required).
+  async function runAi() {
+    toast("Not wired yet", {
+      description:
+        "Summary rewriting is the next AI feature. Edit it by hand for now — it still feeds every generated CV.",
     });
   }
 
   const completeness = profileCompleteness(profile);
 
-  function reset() {
+  async function reset() {
     try {
-      clearProfile();
-    } catch {
-      // ignore
+      const fresh = await clearProfile();
+      setProfile(fresh);
+      toast("Reset", { description: "Profile cleared." });
+    } catch (e) {
+      toast.error("Reset failed", { description: errMsg(e) });
     }
-    setProfile(mockProfile);
-    toast("Reset", { description: "Back to the mock data." });
+  }
+
+  async function extract() {
+    setAiBusy("intelligence");
+    try {
+      // Flush pending edits first — extraction reads the SAVED profile.
+      await saveProfile(profile);
+      const r = await extractIntelligence();
+      // The server usually saved the result already; adopt it. Guard: a
+      // fallback on a never-saved profile returns empty data without
+      // saving — never wipe local keywords with that.
+      if (r.aiUsed || r.data.masterKeywords.length > 0) {
+        update((p) => ({ ...p, aiIntelligence: r.data }));
+      }
+      if (r.aiUsed) {
+        toast.success("Keywords extracted by AI", {
+          description: `${r.data.masterKeywords.length} keywords saved to your profile.`,
+        });
+      } else {
+        toast.error("No AI — keywords kept", {
+          description:
+            "Your current keywords stay as they are. Try again in a moment.",
+        });
+      }
+    } catch (e) {
+      toast.error("Extraction failed", { description: errMsg(e) });
+    } finally {
+      setAiBusy(null);
+    }
   }
 
   return (
@@ -193,8 +242,8 @@ export function ProfileEditor() {
           <SummarySection
             profile={profile}
             update={update}
-            busy={aiBusy === "summary"}
-            onAi={() => runAi("summary")}
+            busy={false}
+            onAi={runAi}
           />
           <SkillsSection profile={profile} update={update} />
           <ExperienceSection profile={profile} update={update} />
@@ -205,20 +254,12 @@ export function ProfileEditor() {
             profile={profile}
             update={update}
             busy={aiBusy === "intelligence"}
-            onExtract={async () => {
-              setAiBusy("intelligence");
-              await withDelay(null, 1400);
-              const intel = mockExtractIntelligence(profile);
-              update((p) => ({ ...p, aiIntelligence: intel }));
-              setAiBusy(null);
-              toast("AI intelligence saved", {
-                description: `${intel.masterKeywords.length} keywords extracted from your data (mock).`,
-              });
-            }}
+            onExtract={extract}
           />
 
           <footer className="border-t border-border pt-6 text-xs text-muted-foreground">
-            Saved in your browser for now — the real backend comes later.
+            Autosaves to your profile — every change is stored a moment after
+            you stop typing.
           </footer>
         </main>
       </div>

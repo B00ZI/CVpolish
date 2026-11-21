@@ -1,74 +1,74 @@
-// Jobs = localStorage fake backend during the mock phase.
-// Saved jobs override mock jobs by id; new jobs append.
+// Jobs = the real backend now. List is the light JobCard projection;
+// full Job comes from create/get. Mutations are small request wrappers —
+// callers own optimistic state updates and toasts.
 
-import type { Job } from "./types";
-import { mockJobs } from "@/mock";
+import { api } from "./api";
+import type {
+  IntegrateResponse,
+  Job,
+  JobCard,
+  Language,
+  MasterProfile,
+  TranslateResponse,
+} from "./types";
 
-export const JOBS_KEY = "cvpolish.jobs.v1";
-const DELETED_KEY = "cvpolish.jobs.deleted.v1";
-
-function readSaved(): Job[] {
-  try {
-    const raw = localStorage.getItem(JOBS_KEY);
-    return raw ? (JSON.parse(raw) as Job[]) : [];
-  } catch {
-    return [];
-  }
+export function loadJobs(): Promise<JobCard[]> {
+  return api<JobCard[]>("/api/jobs");
 }
 
-function writeSaved(jobs: Job[]): void {
-  try {
-    localStorage.setItem(JOBS_KEY, JSON.stringify(jobs));
-  } catch {
-    // storage blocked/full -> app still works in-session
-  }
+/** 404 → throws ApiError; callers map failure to the "not found" screen. */
+export function getJob(id: string): Promise<Job> {
+  return api<Job>(`/api/jobs/${id}`);
 }
 
-/** Ids of mock jobs the user deleted — keeps deletions real across reloads
- *  during the mock phase (mocks can't be removed from the hardcoded array). */
-function readTombstones(): string[] {
-  try {
-    const raw = localStorage.getItem(DELETED_KEY);
-    return raw ? (JSON.parse(raw) as string[]) : [];
-  } catch {
-    return [];
-  }
+/** Create + AI-tailor in one call (the product's core endpoint). */
+export function createJob(description: string): Promise<Job> {
+  return api<Job>("/api/jobs", { method: "POST", json: { description } });
 }
 
-export function loadJobs(): Job[] {
-  if (typeof window === "undefined") return mockJobs;
-  const saved = readSaved();
-  const savedIds = new Set(saved.map((j) => j.id));
-  const deleted = new Set(readTombstones());
-  const all = [...saved, ...mockJobs.filter((m) => !savedIds.has(m.id))];
-  // Normalize old browser data: jobs saved before cvFr/aiUsed existed.
-  return all
-    .filter((j) => !deleted.has(j.id))
-    .map((j) => ({
-      ...j,
-      language: j.language ?? "en",
-      cvFr: j.cvFr ?? null,
-      aiUsed: j.aiUsed ?? false,
-    }));
+export function deleteJob(id: string): Promise<void> {
+  return api<void>(`/api/jobs/${id}`, { method: "DELETE" });
 }
 
-export function getJob(id: string): Job | undefined {
-  return loadJobs().find((j) => j.id === id);
+/** Rename title / fileName / flip active language — send only what changed. */
+export function patchJob(
+  id: string,
+  patch: { title?: string; fileName?: string; language?: Language },
+): Promise<Job> {
+  return api<Job>(`/api/jobs/${id}`, { method: "PATCH", json: patch });
 }
 
-/** Create or update one job (only that job gets persisted). */
-export function upsertJob(job: Job): void {
-  writeSaved([job, ...readSaved().filter((j) => j.id !== job.id)]);
+/** Full replace of one document (en → cv, fr → cvFr). `language` omitted =
+ *  the job's active version. Server recomputes the analysis on write. */
+export function putCv(
+  id: string,
+  cv: MasterProfile,
+  language?: Language,
+): Promise<MasterProfile> {
+  return api<MasterProfile>(`/api/jobs/${id}/cv`, {
+    method: "PUT",
+    json: language ? { cv, language } : { cv },
+  });
 }
 
-/** Remove one job for good. Mock jobs get tombstoned so they stay gone. */
-export function deleteJob(id: string): void {
-  const deleted = readTombstones();
-  if (!deleted.includes(id)) deleted.push(id);
-  try {
-    localStorage.setItem(DELETED_KEY, JSON.stringify(deleted));
-  } catch {
-    // storage blocked -> in-session list still drops it
-  }
-  writeSaved(readSaved().filter((j) => j.id !== id));
+/** AI translate to French (cached server-side — repeat calls are free). */
+export function translateJob(id: string): Promise<TranslateResponse> {
+  return api<TranslateResponse>(`/api/jobs/${id}/translate`, {
+    method: "POST",
+    json: { target: "fr" },
+    timeoutMs: 45_000,
+  });
+}
+
+/** "Ask AI" — one free-text prompt against the active document. */
+export function integrateJob(
+  id: string,
+  prompt: string,
+  language: Language,
+): Promise<IntegrateResponse> {
+  return api<IntegrateResponse>(`/api/jobs/${id}/integrate-missing`, {
+    method: "POST",
+    json: { prompt, language },
+    timeoutMs: 45_000,
+  });
 }

@@ -6,10 +6,8 @@ import { Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import type { Job } from "@/lib/types";
-import { loadProfile } from "@/lib/profile-store";
-import { upsertJob } from "@/lib/jobs-store";
-import { mockAnalyze, withDelay } from "@/mock";
+import { createJob } from "@/lib/jobs-store";
+import { errMsg } from "@/lib/api";
 import { TopBar, BackLink } from "@/components/top-bar";
 
 export function NewJob() {
@@ -22,36 +20,25 @@ export function NewJob() {
   async function analyze() {
     if (!canAnalyze || busy) return;
     setBusy(true);
-    // Title = the first meaningful line of the JD (strip markdown headings).
-    const firstLine =
-      description
-        .trim()
-        .split("\n")
-        .find((l) => l.trim()) ?? "";
-    const title = firstLine.replace(/^#+\s*/, "").slice(0, 80);
-    // The job owns its CV at creation time: the backend will generate it for
-    // this JD (mock = a frozen copy of the profile); later profile edits never
-    // touch it. cvFr starts null — French arrives via the translate button.
-    const profile = loadProfile();
-    const analysis = mockAnalyze({ title, description }, profile);
-    const job: Job = {
-      id: `job-${Date.now()}`,
-      language: "en",
-      title,
-      company: "",
-      description,
-      createdAt: new Date().toISOString(),
-      cv: profile,
-      cvFr: null,
-      analysis,
-      aiUsed: false, // honest: mock froze the profile — real AI lands with the backend
-    };
-    await withDelay(null, 1400);
-    upsertJob(job);
-    toast.success("CV draft saved", {
-      description: "Mock mode — AI tailoring arrives with the backend.",
-    });
-    router.push(`/jobs/${job.id}`);
+    try {
+      // One call: validate, generate the tailored CV (AI, fallback to a
+      // profile freeze), scan the JD — server does title/company too.
+      const job = await createJob(description.trim());
+      if (job.aiUsed) {
+        toast.success("AI tailored your CV", {
+          description: "Summary and bullets rewritten for this job.",
+        });
+      } else {
+        toast.error("No AI — saved without tailoring", {
+          description:
+            "Your profile was copied as-is (key/quota/timeout). Try again later for a full rewrite.",
+        });
+      }
+      router.push(`/jobs/${job.id}`);
+    } catch (e) {
+      toast.error("Couldn't create the CV", { description: errMsg(e) });
+      setBusy(false);
+    }
   }
 
   return (
@@ -64,8 +51,8 @@ export function NewJob() {
           Job description
         </h1>
         <p className="mt-1.5 text-sm text-muted-foreground">
-          One paste is enough — the title comes from the first line, and the
-          CV is tailored from your profile.
+          One paste is enough — the AI tailors your profile into a CV for
+          this job and scans it for missing keywords.
         </p>
 
         <div className="mt-8 space-y-5 rounded-xl border border-border p-6">
@@ -78,7 +65,7 @@ export function NewJob() {
 
           <div className="flex items-center justify-between gap-4 border-t border-border pt-5">
             <p className="text-xs text-muted-foreground">
-              Saved to this browser — the backend comes later.
+              Takes a few seconds — AI writes it, then you edit or print.
             </p>
             <Button onClick={analyze} disabled={!canAnalyze || busy}>
               {busy ? (
