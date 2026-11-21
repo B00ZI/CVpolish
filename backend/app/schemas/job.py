@@ -98,9 +98,8 @@ class TranslateResponse(BaseModel):
     language: Language
 
 class IntegrateMissingRequest(BaseModel):
-    keywords: list[str]                      # the missing ones
-    prompts: list[str]                       # one user note per keyword
-    language: Optional[Language] = None      # omitted = job's active version
+    prompt: str                
+    language: Optional[Language] = None      
 
 class IntegrateMissingResponse(BaseModel):
     aiUsed: bool

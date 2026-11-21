@@ -126,7 +126,7 @@ on load instead of reading localStorage.
    `PATCH /api/jobs/{id} {language}` — allowed only when `cvFr` exists
    (`"fr"` without it → 422).
 7. "Ask AI" under missing chips → `POST /api/jobs/{id}/integrate-missing`
-   → weaves the missing keywords into bullets **of the displayed version**
+   → runs the user's free-text prompt against **the displayed version**
    (source or French), saves it, returns `{aiUsed, cv, cvFr}`.
 8. Print: browser only (`window.print()`, filename via `document.title`)
    → **no endpoint at all**
@@ -662,25 +662,39 @@ Requirements:
 
 #### `POST /api/jobs/{id}/integrate-missing`  ⚡ AI
 - "Ask AI" under the missing-keyword chips — the workspace's other explicit
-  AI call. Body:
+  AI call. **One free-text prompt, any edit**: weave missing keywords in,
+  rewrite a summary, fix one project — the user says, the AI does. Body:
 ```json
 {
-  "keywords": ["GraphQL", "Kubernetes"],
-  "prompts": ["Say where each keyword is used and how, tied to real experience/projects"],
+  "prompt": "Add GraphQL to my platform project — as the API layer we migrated to",
   "language": "en"
 }
 ```
-  (`keywords` = currently missing ones; `prompts` = one string per keyword,
-  the user's instruction; `language` = the ACTIVE version — the server
-  weaves into **that** document: `"en"` → `cv`, `"fr"` → `cv_fr`.)
-- With a flash model: weave each keyword into `experience`/`projects`
-  bullets of the active document, honoring the prompt; save it; seconds,
-  not minutes; strict timeout.
+  (`prompt` = the user's instruction, any purpose; empty after trim → `422`.
+  `language` = the ACTIVE version — the server edits **that** document:
+  `"en"` → `cv`, `"fr"` → `cv_fr`; omitted → the job's active `language`;
+  `"fr"` with no `cv_fr` → `422` "translate first", same rule as PUT.)
+- With a flash model: one prompt = fixed instruction block + the user's
+  prompt + the active CV as JSON. The instruction block carries the hard
+  rules: **minimal diff — change only what the user asked, nothing else**;
+  editable: summary, experience, projects, skills; locked byte-for-byte:
+  contact, education, certifications; same ids, same entries, same order
+  (never add/remove/reorder); never invent employers, dates, titles or
+  numbers; write in the CV's own language (tech names as-is); **return ONLY
+  raw JSON**. Seconds, not minutes; strict timeout. No cache rule (unlike
+  #12) — every call is one model request.
+- Save path (mirror #12): validate against your Pydantic → structure guard
+  (experience/project id lists must equal the source's) → locked-section
+  check (contact, education, certifications deep-equal the source) → code
+  wins on `updatedAt`/`lastExtractedAt` → reassign `cv` or `cv_fr`
+  (JSONB: full reassign, never in-place mutation) → commit.
 - Response `200` (AI path): `{ "aiUsed": true, cv, cvFr }` — both documents
-  back (one unchanged), client adopts.
-- Response `200` (fallback): same shape, active document **unchanged**,
-  `aiUsed: false` → client advisory toast ("AI unavailable — edit
-  manually"). Never 500.
+  back (one unchanged), client adopts. **No analysis in the body**:
+  requirements never change, so the client's live scan re-checks the new
+  CV text against the stored required set (green flips on its own).
+- Response `200` (fallback): same shape, active document **unchanged**
+  (`rollback`), `aiUsed: false` → client advisory toast ("AI unavailable —
+  edit manually"). Never 500.
 
 #### Frontend-only features — build NO endpoints for these
 | Feature | Why it needs no backend |

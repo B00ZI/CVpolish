@@ -31,7 +31,9 @@ from app.schemas.job import (
     MasterProfileResponse,
     JobCvBody,
     TranslateRequest,
-    TranslateResponse
+    TranslateResponse,
+    IntegrateMissingRequest,
+    IntegrateMissingResponse,
 )
 from app.schemas.profile import Experience, Project
 
@@ -495,6 +497,108 @@ def translate_job(id: str, body: TranslateRequest, db: Session = Depends(get_db)
             cvFr=MasterProfileResponse(**job.cv_fr) if job.cv_fr else None,
             language=job.language,
         )
+
+
+@router.post("/{id}/integrate-missing", response_model=IntegrateMissingResponse)
+def integrate_missing(id: str, body: IntegrateMissingRequest, db: Session = Depends(get_db)):
+    job = db.query(JobModel).filter(JobModel.id == id).first()
+    if job is None:
+        raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"no job with id {id}",
+            )
+    if not body.prompt or not body.prompt.strip():
+        raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                        detail=f"prompt cant be empty",
+                        )
+    
+    which = body.language or job.language
+    if which == "fr" and job.cv_fr is None:
+                 raise HTTPException(
+                      status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                      detail="no cvFr translate first",)
+
+    if which == "fr":
+            source = job.cv_fr  
+    else:
+            source =  job.cv 
+
+    try:
+         prompt = (
+             "You edit a CV at the user's request. Return ONLY raw JSON — "
+             "no markdown, no commentary.\n\n"
+             "## Task (the user's instruction — do exactly this, nothing "
+             "more)\n" + body.prompt + "\n\n"
+             "## CV\n" + json.dumps(source) + "\n\n"
+             "## Rules\n"
+             "1. MINIMAL DIFF: change only what the Task asks. \"Add X to "
+             "project Y\" -> only that changes; every other string comes "
+             "back identical. Never a full rewrite.\n"
+             "2. Editable: summary, experience, projects, skills. Locked "
+             "byte-for-byte: contact, education, certifications — copy "
+             "exactly.\n"
+             "3. Same ids, same entries, same order — never add, remove or "
+             "reorder.\n"
+             "4. Never invent employers, dates, titles or numbers.\n"
+             "5. Write in the CV's own language (French CV -> French text); "
+             "tech names (GraphQL, React) stay as-is.\n"
+         )
+         text = call(prompt)
+         raw = json.loads(text)
+         data = MasterProfileResponse(**raw).model_dump()
+
+         # Locked sections: contact, education, certifications never change.
+         for key in ("contact", "education", "certifications"):
+             if data.get(key) != source.get(key):
+                 raise ValueError(f"{key} must not change")
+
+         # Code wins on machine fields — never trust the model with them.
+         data["updatedAt"] = source.get("updatedAt")
+         if isinstance(data.get("aiIntelligence"), dict):
+             data["aiIntelligence"]["lastExtractedAt"] = (
+                 (source.get("aiIntelligence") or {}).get("lastExtractedAt")
+             )
+
+         if which == "fr":
+               job.cv_fr = data 
+         else:
+               job.cv = data
+
+         if [e.get("id") for e in source.get("experience", [])] != [
+                     e.get("id") for e in data.get("experience", [])
+                 ]:
+                     raise ValueError("experience structure changed")
+         
+         if [p.get("id") for p in source.get("projects", [])] != [
+                     p.get("id") for p in data.get("projects", [])
+                 ]:
+                     raise ValueError("projects structure changed")
+
+         
+         db.commit()
+         db.refresh(job)
+         return IntegrateMissingResponse( 
+            aiUsed= True , cv = job.cv , cvFr = job.cv_fr
+
+         )
+
+         
+
+    except Exception as e :
+         print(e)
+         db.rollback()
+         # Fallback: active document unchanged, never 500.
+         return IntegrateMissingResponse(
+             aiUsed=False,
+             cv=MasterProfileResponse(**(job.cv or {})),
+             cvFr=MasterProfileResponse(**job.cv_fr) if job.cv_fr else None,
+         )
+
+
+              
+
+
 
 
 @router.delete("/{id}", status_code=204)

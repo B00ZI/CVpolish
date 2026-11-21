@@ -11,13 +11,13 @@ explicitly say "do it for me").
 - [x] Frontend (all screens, mock data) .................... DONE
 - [x] Step (a): job CRUD endpoints .......................... DONE
 - [x] Step (b): single master profile migration ............. DONE
-- [ ] Step (c): AI wiring .............................. IN PROGRESS
+- [x] Step (c): AI wiring ................................ DONE
       1. ai.py helper (call the AI) ................. DONE
       2. #4 extract (keywords from profile) ......... DONE
       3. #6 generate CV (THE product) + Option B .... DONE
       4. #12 translate to French .................... DONE
-      5. #11 "Ask AI" missing keywords .............. NEXT
-- [ ] Connect frontend to real API (swap fetch) ........... not started
+      5. #11 "Ask AI" (free-text CV edit) ........... DONE
+- [ ] Connect frontend to real API (swap fetch) ........... NEXT
 - [ ] Polish + demo deploy ............................... not started
 
 ## Done so far (short version)
@@ -40,26 +40,32 @@ explicitly say "do it for me").
   second call is the cache (0.14 s, no model call); force re-runs the model;
   both fallback paths (no copy yet / force with AI dead) return cleanly with
   aiUsed: false and nothing changed.
+- 2026-11-17: #11 "Ask AI" works — POST {prompt, language} → one free-text
+  prompt edits the active CV (minimal diff: only what you asked), 3 guards
+  block bad model replies (structure ids, locked contact/education/certs,
+  machine timestamps code-wins), fallback returns the doc unchanged.
+  Step (c) — ALL FIVE AI pieces done.
 
 ## RIGHT NOW (the one thing)
-**#11 integrate-missing — POST /api/jobs/{id}/integrate-missing (API.md).**
-The "Ask AI" button under the missing-keyword chips.
-1. Body: {keywords: [...], prompts: [one per keyword], language: "en"|"fr"}.
-   language = which CV to edit: en → cv, fr → cv_fr (fr with no cvFr → 422,
-   same rule as PUT cv).
-2. AI path: read the active CV → ask Gemini to weave each keyword into an
-   existing experience/project bullet, using the user's prompt as context,
-   never inventing facts → validate → save that CV → 200 {aiUsed: true, cv,
-   cvFr} (both docs back, the other one unchanged).
-3. Fallback (no key / fail): active CV unchanged, aiUsed: false, same shape.
-   Never 500.
+**Frontend swap — replace mock data with real fetch calls (API.md §6).**
+The backend is complete: 12 endpoints, all AI branches tested. Every screen
+still reads/writes localStorage + mock generators. Swap map (API.md §6):
+- `lib/profile-store.ts` → GET/PUT /api/profile
+- `lib/jobs-store.ts` → GET /api/jobs, GET/PATCH/PUT/DELETE /api/jobs/{id}
+- `mockAnalyze()` → POST /api/jobs
+- `mockExtractIntelligence()` → POST /api/profile/extract-intelligence
+- `mockAutoFit()` → POST /api/jobs/{id}/integrate-missing
+- translate toast → POST /api/jobs/{id}/translate
+- delete `withDelay()` fake spinners — real latency
+- add NEXT_PUBLIC_API_URL (.env → docker-compose) so the browser can reach
+  :8000
 
-Test against :8000: job with missing chips → POST keywords+prompts →
-aiUsed true, each keyword now inside a bullet (live scan flips it green),
-other CV untouched → repeat with AI dead → aiUsed false, nothing changed.
+Done when: same screens, same states, spinners driven by real requests,
+and a full flow works end-to-end with the backend up (create → scan →
+Ask AI → translate → edit → print).
 
 ## Next after that (in order)
-1. Swap frontend from mock data to real fetch calls
+1. Polish + deploy so I can put a live link on my own CV
 
 ## Golden rules (never break)
 - Free AI only (Gemini free tier). No paid anything.
