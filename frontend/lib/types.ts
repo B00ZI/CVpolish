@@ -62,14 +62,6 @@ export interface SkillGroup {
   skills: string[];
 }
 
-// AI keeps a distilled view of the profile: the keyword dictionary and a
-// baseline summary it can start rewrites from. Computed on explicit save.
-export interface AiIntelligence {
-  masterKeywords: string[];   // extracted from skills, technologies, tech stacks
-  baselineSummary: string;    // neutral base line the AI rewrites per job
-  lastExtractedAt: string | null; // ISO date of last extraction
-}
-
 export interface MasterProfile {
   contact: Contact;
   summary: string;            // 2-3 sentences, ~100 words, AI or manual
@@ -78,16 +70,18 @@ export interface MasterProfile {
   projects: Project[];
   education: Education[];
   certifications: Certification[];   // optional section, [] if none
-  aiIntelligence: AiIntelligence;     // what the AI is allowed to use
   updatedAt: string;          // ISO date
 }
 
 // ===== Job pipeline =====
 
-export interface GapAnalysis {
-  score: number;                     // match % (matched / total * 100)
-  matched: string[];                 // keywords you already have
-  missing: string[];                 // keywords the job wants, you lack
+/** One JD requirement — the AI reads these from the job description at
+ *  creation (backend/API.md §4b). Matched/missing/score are never stored;
+ *  they're computed live from these + the displayed CV. */
+export interface Keyword {
+  term: string;                    // canonical form, e.g. "PostgreSQL"
+  aliases: string[];               // alternate spellings, e.g. ["postgres","psql"]
+  tier: "required" | "optional";   // required → red/green + score; optional → orange only
 }
 
 export interface Job {
@@ -105,13 +99,16 @@ export interface Job {
   cvFr: MasterProfile | null;
   /** PDF filename override; falls back to a computed default when unset. */
   fileName?: string;
-  analysis: GapAnalysis;       // always set — computed on `cv` at creation
-  /** true = AI generated/edited this CV; false = fallback ran (no key/quota). */
+  /** The JD's requirements. Found/missing/score are derived live in the
+   *  workspace (lib/cv-text.ts) — never stored, never sent. */
+  keywords: Keyword[];
+  /** true = AI generated this CV. #6 is AI-required, so always true today;
+   *  kept so the UI can tell the story (and for a possible future non-AI path). */
   aiUsed?: boolean;
 }
 
-/** Light card list from GET /api/jobs — never ships cv/description/analysis;
- *  counts come pre-computed from the stored analysis. */
+/** Light card list from GET /api/jobs — never ships cv/description/keywords;
+ *  score/counts are computed server-side at read (same rule as the live scan). */
 export interface JobCard {
   id: string;
   title: string;
@@ -120,8 +117,8 @@ export interface JobCard {
   hasFr: boolean;               // cvFr exists → home shows "EN · FR"
   createdAt: string;
   score: number;
-  matchedCount: number;
-  missingCount: number;
+  matchedCount: number;         // required keywords found in cv
+  missingCount: number;         // required keywords absent from cv
   fileName?: string | null;
   /** AI used when this CV was created. The server's JobCard does NOT send
    *  it yet — the home badge lights up automatically once it does. */
@@ -129,11 +126,6 @@ export interface JobCard {
 }
 
 // ===== API response bodies (small, adopt-as-is) =====
-
-export interface ExtractResponse {
-  aiUsed: boolean;
-  data: AiIntelligence;
-}
 
 export interface TranslateResponse {
   aiUsed: boolean;

@@ -39,7 +39,8 @@ export function patchJob(
 }
 
 /** Full replace of one document (en → cv, fr → cvFr). `language` omitted =
- *  the job's active version. Server recomputes the analysis on write. */
+ *  the job's active version. Nothing to recompute server-side — the
+ *  workspace's chips/score update live from the new text. */
 export function putCv(
   id: string,
   cv: MasterProfile,

@@ -3,7 +3,7 @@
 // structure it creates on first GET).
 
 import { api } from "./api";
-import type { ExtractResponse, MasterProfile } from "./types";
+import type { MasterProfile } from "./types";
 
 /** Valid empty profile — matches the backend's empty-structure response.
  *  updatedAt is a fixed placeholder (never read; keeps prerender pure). */
@@ -16,7 +16,6 @@ export function emptyProfile(): MasterProfile {
     projects: [],
     education: [],
     certifications: [],
-    aiIntelligence: { masterKeywords: [], baselineSummary: "", lastExtractedAt: null },
     updatedAt: "1970-01-01T00:00:00.000Z",
   };
 }
@@ -33,12 +32,4 @@ export function saveProfile(profile: MasterProfile): Promise<MasterProfile> {
 /** Reset → server returns the fresh empty structure. */
 export function clearProfile(): Promise<MasterProfile> {
   return api<MasterProfile>("/api/profile", { method: "DELETE" });
-}
-
-/** AI keyword extraction — saves the result server-side, returns it. */
-export function extractIntelligence(): Promise<ExtractResponse> {
-  return api<ExtractResponse>("/api/profile/extract-intelligence", {
-    method: "POST",
-    json: {},
-  });
 }
