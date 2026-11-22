@@ -1,23 +1,26 @@
 # CVPolish — Backend build guide (API)
 
-This is the contract between the frontend (mock-phase, being rebuilt to match
-this file) and the backend **you** are building. Shapes match
-`frontend/lib/types.ts` 1:1, so the swap from mock data to real fetches is
-mechanical.
+This is the contract between the frontend (wired to these endpoints since
+2026-11-17) and the backend. Shapes match
+`frontend/lib/types.ts` 1:1.
 
 **The product in one sentence:** paste a job description → AI writes you a
 tailored CV from your one master profile → a keyword scan shows what's still
 missing → one click gets you the French version → print PDF.
 
-**AI is the product.** The no-AI path exists for two reasons only: (1) the
-demo must never break if the key/quota dies mid-show, (2) development should
-not be blocked by quota. It is a safety net, not a design driver — see the
-fallback inventory in the appendix. Never spend logic on it beyond a
-`try/except` that falls through to code that already exists.
+**AI is the product — and AI is required for AI features.** Create a CV,
+translate, and Ask AI need the model. If it can't run (no key, quota,
+timeout, bad model output) those endpoints return **`503` with a
+human-readable `{ "detail": "..." }`** — never a fake CV, never a silent
+`200`, never a raw `500`. Naturally non-AI features — scanning, editing,
+printing, the translate cache — always work. The translate cache is not a
+fallback: an existing `cvFr` is returned with `200 {aiUsed:false}` and zero
+model calls (the quota rule).
 
-Eleven endpoints become twelve with `translate`. Three AI branches exist
-today in the plan (#4, #6, #11) plus the new #12; every one falls through to
-existing code on failure and still returns `200`.
+Eleven endpoints (the old #4 extract-intelligence was retired when
+`aiIntelligence` was replaced by per-job `keywords`). Three AI branches
+remain — #6 create, #11 integrate, #12 translate — each returning `503` on
+failure; only #12 has a cache rule.
 
 ---
 
@@ -48,7 +51,6 @@ The browser's localStorage is the fake backend only until the swap:
 | `cvpolish.profile.v1` (the one profile) | DB row `profiles(id='master')` via `GET/PUT` |
 | `cvpolish.profile.fr.v1` (old FR profile) | **gone** — orphaned by the single-profile redesign, ignored |
 | `cvpolish.jobs.v1` (saved jobs, now with `cvFr`) | DB rows in `jobs` via the job endpoints |
-| `aiIntelligence` migration flags | inside the profile JSON |
 | `cvpolish.theme` (dark/light) | **stays** — UI preference, no backend |
 
 No sync endpoint, no export/import. After the swap the frontend just fetches
@@ -60,8 +62,8 @@ on load instead of reading localStorage.
    document 500 ms after the last keystroke. Full replace because one editor
    edits one deep slice — per-field patching isn't worth it for a personal
    tool. Debounce turns hundreds of keystrokes into ~one request.
-2. **Explicit user action → one request.** "Reset", "Save & extract",
-   "Analyze", "Translate", "Ask AI" call once; the response replaces state.
+2. **Explicit user action → one request.** "Reset", "Translate", "Ask AI"
+   call once; the response replaces state.
 3. **AI action → request that mutates and returns.** The server changes the
    saved data and gives the result back; the client drops its local copy and
    adopts the response (no optimistic guesswork).
@@ -72,48 +74,56 @@ on load instead of reading localStorage.
 
 ### A. Profile page `/profile`
 1. Mount → `GET /api/profile` → first time ever: **empty structure** (no
-   seed data) → UI shows 8 empty editable sections
+   seed data) → UI shows 7 empty editable sections
 2. User types → state updates live → after 500 ms idle → `PUT /api/profile`
    (whole `MasterProfile`)
-3. "Save & extract" → `POST /api/profile/extract-intelligence` → keywords +
-   baseline summary saved server-side → result renders
-4. "Reset data" (confirm) → `DELETE /api/profile` → empty structure back
+3. "Reset data" (confirm) → `DELETE /api/profile` → empty structure back
 
-> Home's completeness bar is computed in the browser from this profile —
-> no extra endpoint.
+> No AI lives on this page anymore (the old extract-intelligence endpoint
+> and `aiIntelligence` block are gone — keywords are per-job now). Home's
+> completeness bar is computed in the browser from this profile — no extra
+> endpoint.
 
 ### B. New CV `/jobs/new` — the one place a CV is BORN
 1. Paste the full job description. That's the whole form — no language
    picker (the source profile is always English).
-2. "Generate CV" → `POST /api/jobs` `{description}` → backend (AI path):
+2. "Generate CV" → `POST /api/jobs` `{description}` → backend:
    - **generates the tailored CV**: contact, education, certifications
      copied verbatim from the profile; summary, experience and projects
      AI-rewritten for THIS JD — reuse real entries only (drop irrelevant
      ones, order by relevance, clean bullets), **never invent** employers,
      projects, numbers or skills
-   - **analyzes the generated CV** against the JD (Keyword scan contract,
-     section 4b): matched / missing / score
+   - **generates the keyword list**: `keywords: [{term, aliases, tier}]`
+     read straight from the JD — concrete terms only, `tier` = `"required"`
+     (the JD demands it) or `"optional"` (nice to have), `aliases` =
+     alternate spellings ("PostgreSQL" → ["postgres", "psql"]). Cleaned
+     server-side (section 4b Rule 2); an empty list fails the request.
    - saves the row (`language: "en"`, `cvFr: null`) and returns the full
-     `Job` in one response
-   - without AI (no key / quota / timeout): fallback = frozen profile copy +
-     same local analysis, `aiUsed: false` — same response shape, never 500
+     `Job` in one response → `201`
+   - **AI failure (no key / quota / timeout / bad output) → `503` with a
+     readable detail and NO row written.** There is no fake-CV fallback —
+     the client toasts the detail and the user tries again.
 3. Frontend navigates to `/jobs/{id}` with the returned `id`
 
 ### C. Workspace `/jobs/{id}` — view, edit, translate, print
-1. Mount → `GET /api/jobs/{id}` → left panel = analysis + missing-keyword
-   chips; right = the live A4 CV
+1. Mount → `GET /api/jobs/{id}` → left panel = keyword chips + live score;
+   right = the live A4 CV
 2. **Which version shows:** `job.language === "fr"` and `cvFr` exists →
    show the French copy; otherwise the source (`cv`). Section labels and the
    default filename follow `job.language`.
-3. Green/amber flips and the live score: 100% frontend — the displayed CV
-   text is scanned locally for keywords. **No backend involvement on edits.**
-   (Analysis was computed on the source at creation; the live scan may flip
-   a chip when you view the French copy — tech keywords are mostly
-   language-invariant, small noise is accepted. See 4b.)
+3. **The scan is 100% frontend** (section 4b): the displayed CV text is
+   scanned against `job.keywords` (word-boundary, tiers honored) — green =
+   found, red = required-missing, orange = optional-missing, score =
+   required only. **No backend involvement on edits.** The backend computes
+   the same numbers only at read time, for home cards (which don't ship CV
+   text). When the French copy is displayed the same set is scanned against
+   French text — tech keywords stay untranslated, occasional flips are
+   accepted noise. See 4b.
 4. Edits (inline click-to-edit, quick-add, bullets) → debounced
    `PUT /api/jobs/{id}/cv` with `{cv, language}` — `language` says **which
    document** is being replaced (`"en"` → `cv`, `"fr"` → `cvFr`). Never
-   touches the other one, never touches the master profile.
+   touches the other one, never touches the master profile. Chips and score
+   update live in the browser — nothing to recompute server-side.
 5. **Translate button** (explicit, never automatic):
    `POST /api/jobs/{id}/translate {target:"fr"}` → AI translates the source
    `cv` string-values to French (structure, ids, tech names untouched;
@@ -121,13 +131,15 @@ on load instead of reading localStorage.
    "Aujourd'hui") → server **saves `cvFr`** and sets `language: "fr"` →
    returns `{aiUsed, cvFr, language}`. If `cvFr` already exists the server
    returns it **without calling the model** (quota rule) unless
-   `force: true` (explicit "Re-translate" after edits).
+   `force: true` (explicit "Re-translate" after edits). Model failure →
+   `503`, nothing saved.
 6. **EN/FR toggle** in the top bar: switches which version shows via
    `PATCH /api/jobs/{id} {language}` — allowed only when `cvFr` exists
    (`"fr"` without it → 422).
 7. "Ask AI" under missing chips → `POST /api/jobs/{id}/integrate-missing`
    → runs the user's free-text prompt against **the displayed version**
-   (source or French), saves it, returns `{aiUsed, cv, cvFr}`.
+   (source or French), saves it, returns `{aiUsed, cv, cvFr}`. Model
+   failure → `503`, document unchanged.
 8. Print: browser only (`window.print()`, filename via `document.title`)
    → **no endpoint at all**
 
@@ -155,13 +167,17 @@ on load instead of reading localStorage.
 - **Errors are plain:** `{ "detail": "..." }` (FastAPI default). The UI
   toasts them and keeps local state — a failed save quietly retries on the
   next edit.
-- **AI endpoints never fail:** no key / quota / slow model / bad model
-  output → still `200`, with `aiUsed: false` and a useful non-AI result (or
-  the unchanged document for translate/integrate). Never a 500.
+- **AI endpoints fail loudly:** no key / quota / slow model / bad model
+  output → **`503`** with a readable `detail` ("…nothing was created /
+  changed. Try again in a moment.") — the client toasts it. Never a fake
+  result, never a silent `200`, never a raw `500` (catch `Exception`, raise
+  `HTTPException`, keep the transaction rolled back).
+- **The translate cache is the one `200 aiUsed:false` case:** it means
+  "reused the saved copy", not "AI failed" (quota rule: a translated CV is
+  paid for once).
 - **AI calls are cheap and bounded:** free-tier flash-class model, strict
-  timeout (~10 s generate / translate, ~15 s integrate), and translate
-  answers from cache when `cvFr` already exists. You are broke — quota is a
-  feature.
+  timeout (20 s cap in `core/ai.py`), translate answers from cache when
+  `cvFr` already exists. You are broke — quota is a feature.
 
 ---
 
@@ -198,10 +214,10 @@ type Education = {
 
 type Certification = { id: string; name: string; issuer: string; year: string };
 
-type AiIntelligence = {
-  masterKeywords: string[];        // the keyword dictionary matching runs on (~15 max)
-  baselineSummary: string;         // what the AI may reuse as a summary base
-  lastExtractedAt: string | null;  // null = never extracted → UI shows "—"
+type Keyword = {                   // one JD requirement, from #6's model
+  term: string;                    // canonical form, e.g. "PostgreSQL"
+  aliases: string[];               // alternate spellings, e.g. ["postgres","psql"]
+  tier: "required" | "optional";   // required → red/green + score; optional → orange only
 };
 
 type MasterProfile = {
@@ -212,44 +228,37 @@ type MasterProfile = {
   projects: Project[];
   education: Education[];
   certifications: Certification[];
-  aiIntelligence: AiIntelligence;
   updatedAt: string;
-};
-
-type GapAnalysis = {
-  score: number;                   // round(matched / (matched + missing) * 100)
-  matched: string[];               // keywords you already have
-  missing: string[];               // keywords the job wants that you lack
-  notes: Record<string, string>;   // legacy, always {}; UI no longer writes it
-  added: string[];                 // legacy, always []; UI no longer writes it
 };
 
 type Job = {
   id: string;
   language: Language;              // ACTIVE version shown/printed: "en" until translated
-  title: string;                   // from the AI (or first JD line on fallback)
-  company: string;                 // from the AI ("" on fallback)
+  title: string;                   // from the AI (first JD line fallback is gone — #6 is AI-only)
+  company: string;                 // from the AI
   description: string;             // raw pasted JD, stored verbatim
   createdAt: string;
   cv: MasterProfile;               // SOURCE CV — English, editable, the master of truth
   cvFr: MasterProfile | null;      // French copy — AI-generated once, persisted; null = not yet
   fileName?: string;               // renamed PDF filename, else client default
-  analysis: GapAnalysis;           // ALWAYS set — computed on `cv` at creation
-  aiUsed: boolean;                 // true = AI generated/edited this CV; false = fallback
+  keywords: Keyword[];             // the JD's requirements — NEVER matched/missing/score
+                                   // (those are computed live from these + cv text)
+  aiUsed: boolean;                 // true = AI generated this CV (#6 is AI-required, so
+                                   // always true today; kept so the UI can tell the story)
   // Legacy fields from old browser data: NOT part of the API. The backend
   // never stores or returns `rewrites` / `tailored`; the frontend ignores
   // them if an old localStorage dump still carries them.
 };
 
-type JobCard = {                   // GET /api/jobs — light, never ships cv/description
+type JobCard = {                   // GET /api/jobs — light, never ships cv/description/keywords
   id: string;
   title: string;
   company: string;
   language: Language;              // active version (badge)
   createdAt: string;
-  score: number;
-  matchedCount: number;
-  missingCount: number;
+  score: number;                   // computed AT READ (server): score_keywords(cv, keywords)
+  matchedCount: number;            // required keywords found in cv
+  missingCount: number;            // required keywords absent from cv
   fileName?: string;
   hasFr: boolean;                  // cvFr exists → home shows "EN · FR"
 };
@@ -267,8 +276,8 @@ type TranslateRequest  = { target: "fr"; force?: boolean };          // POST ...
 type TranslateResponse = { aiUsed: boolean;
                            cvFr: MasterProfile | null;
                            language: Language };
-type IntegrateRequest  = { keywords: string[]; prompts: string[];
-                           language: Language };                     // convenience echo
+type IntegrateRequest  = { prompt: string;                          // free text, any edit
+                           language?: Language };                    // which doc to edit
 type IntegrateResponse = { aiUsed: boolean;
                            cv: MasterProfile;
                            cvFr: MasterProfile | null };
@@ -283,6 +292,11 @@ jobs     (id PK, title, company, language, description,
           cv_fr JSONB nullable, ai_used Boolean NOT NULL default False)
 ```
 
+The DB column keeps its historical name **`analysis`** but its content is
+now the keyword list (`Keyword[]` JSON) — the API field is `keywords`. No
+migration needed (no rows carried the old shape; any straggler row's old
+dict content is ignored by `row_keywords()`).
+
 No `status` column (the old draft/analyzed pipeline was dropped — it never
 reflected real state). If an old client sends `status`, ignore it silently,
 never return it.
@@ -294,17 +308,22 @@ the UI renders them as click-to-edit placeholders.
 
 ## 4b. Keyword scan contract — ONE rule, implemented on BOTH sides
 
-This is the consistency guarantee of the whole app. The frontend lives in
-`lib/cv-text.ts` (`cvText()` + `analyzeForJob()`), the backend creation
-analysis in `analyze_for_job()` — Rule 1 + Rules 4-5 must produce the SAME
-numbers on both sides for the same CV + required set. `analyzeForJob()`
-in the frontend implements the Rule 3 fallback filter (it runs in mock
-phase only); on the AI path the required set comes from #6's model and is
-stored in the analysis (`matched ∪ missing` — Rule 5 re-checks exactly
-that). If the contract ever changes, change both sides in the same commit.
+This is the consistency guarantee of the whole app. Two implementations of
+the SAME rules:
 
-**Rule 1 — the text to scan** (`cv_text`): concatenate exactly these fields
-into one string, lowercased (`"React"` → `"react"`). Nothing else.
+- **Frontend** `lib/cv-text.ts`: `cvText()` + `analyzeKeywords(cvText,
+  keywords)` — runs **live** in the workspace on every edit (chips +
+  score), and on `/jobs/new` in mock phase.
+- **Backend** `cv_text()` + `score_keywords(cv, keywords)` in
+  `app/routers/job.py` — runs **only at read time** inside `to_card()` for
+  home cards (cards ship neither `cv` nor `keywords`, so the client can't).
+
+Same input → same numbers, always. If the contract ever changes, change
+both sides in the same commit.
+
+**Rule 1 — the text to scan** (`cv_text` / `cvText`): concatenate exactly
+these fields into one string, lowercased (`"React"` → `"react"`). Nothing
+else.
 
 ```
 contact.fullName + contact.targetTitle + summary
@@ -315,50 +334,69 @@ for each education  : degree + major + university + location
 for each certification : name + issuer
 ```
 
-(The original frontend scan did NOT include `experience[].technologies`; it
-does since the 2026-11-09 decision — a tech listed under a job's
-technologies counts as "on the CV".)
+(`experience[].technologies` counts as "on the CV" — decision 2026-11-09.)
 
-**Rule 2 — where `required` comes from** (Option B, decided 2026-11-17):
-at creation the source depends on the path —
+**Rule 2 — where `keywords` come from:** ONLY from #6's model. The prompt
+returns `keywords: [{term, aliases, tier}]` — concrete skill/tool/practice
+terms read straight from the JD (not sentences), `tier` = `"required"` if
+the JD demands it, `"optional"` if nice-to-have, `aliases` = alternate
+spellings the CV might use. Server-side cleaning before storage:
 
-- **AI path (#6):** the model reads the JD and returns `requiredKeywords`
-  — the concrete skills/tools/practices the JD demands. Cleaned (strings,
-  stripped, deduped, ≤20) and used as-is; no substring filter on top.
-- **Fallback (no key / any AI failure):** Rule 3's filter below.
+- `term`: strip, drop if empty, dedupe case-insensitively (first wins)
+- `aliases`: strip, drop empty and term-equal ones, cap at 5
+- `tier`: must be `"required"`/`"optional"`; anything else → `"required"`
+- non-dict / non-list input → the whole creation fails
+- **empty result → creation fails** (`503`) — a CV with no requirements
+  can't be scored, and the model returning nothing means it didn't do the
+  job
 
-Words outside the required set never appear in matched/missing. The AI
-path exists to close the fallback's blind spot: a JD keyword the profile
-never claimed (so it isn't in `masterKeywords`) is invisible on Rule 3 but
-shows up as missing when the model reads it straight from the JD.
+There is no fallback keyword source anymore (`masterKeywords` is gone with
+#4). A JD keyword the profile never claimed still shows up — the model
+reads it from the JD, the CV doesn't have it, it's a red chip. That's the
+app's point.
 
-**Rule 3 — fallback filter** = the master keywords
-(`aiIntelligence.masterKeywords`, extracted on the profile page) that
-appear in the JD text (case-insensitive substring). A keyword the JD never
-mentions can't be required on this path, so it's neither matched nor
-missing.
+**Rule 3 — word-boundary match** (case-insensitive) against Rule 1's
+lowercased text. For a keyword, try its `term`, then each `alias`; a hit on
+any of them counts. Build the pattern with `re.escape(t)` where `t` =
+lowercased/stripped needle, adding guards **only where the edge is a word
+character**:
 
-**Rule 4 — matched vs missing** (against `cv_text`, Rule 1):
+```
+prefix: (?<![a-z0-9])   if t[0] is alphanumeric      (so "git" can't start mid-word)
+suffix: (?![a-z0-9])     if t[-1] is alphanumeric     (so "git" can't end mid-word)
+```
 
-- `matched`  = required keyword whose lowercase text appears in `cv_text`
-- `missing`  = required keyword that does NOT appear in `cv_text`
-- `score`    = `round(matched / (matched + missing) * 100)`, `0` when both empty
+- `"git"` does NOT match `"github"` (the old substring bug — this is why
+  the rule changed), but DOES match `"we use git daily"`
+- `"C++"` / `"C#"` / `".net"` / `"Node.js"` match — their edges are not
+  word characters, so no guard is added there
+- the needle is lowercased by the matcher; the text arrives lowercased from
+  Rule 1 — that's the case-insensitivity
 
-**Rule 5 — the frontend live scan re-checks only `matched ∪ missing`**
-(the required set) against the **displayed** CV as the user edits it. It may
-flip a green chip red again — but it can never invent a chip the backend
-didn't report, because both sides scan the same text with the same rule.
+**Rule 4 — found / missing / score** (against `cv_text`):
 
-**French viewing:** `analysis` is computed on the source `cv` (English) at
-creation. When the French copy is displayed, the live scan runs the same
-required set against French text — tech keywords (React, Docker, CI/CD…) stay
-untranslated, so results agree in practice; occasional flips are accepted
-noise for a personal tool. Do not build a second analysis for `cvFr`.
+- **found**  = `tier: "required"` keyword whose term OR alias hits the text
+- **missing** = `tier: "required"` keyword with no hit
+- **optional** keywords are NEVER missing and NEVER count in the score —
+  they render as an orange chip when absent ("nice to have")
+- `score` = `round(found / (found + missing) * 100)`; `0` when there are no
+  required keywords
 
-> Why substring, not word-boundary? Deliberate trade-off for a personal
-> tool: "git" matching inside "github" is acceptable noise; a regex word
-> scan adds complexity for no real gain. If it ever bothers you, fix it HERE
-> and in the frontend in one commit — nowhere else.
+**Rule 5 — who runs it, when:**
+
+- **Frontend, live:** every render of the workspace scans the displayed CV
+  against `job.keywords` — chips and score are pure functions of what's on
+  screen. No endpoint, no debounce needed for correctness.
+- **Backend, at read:** `GET /api/jobs` runs the identical function to fill
+  `JobCard.score/matchedCount/missingCount`. Full `GET /api/jobs/{id}`
+  never precomputes anything — the workspace scans client-side.
+- Nothing is ever stored: matched/missing/score are derived, not data.
+
+**French viewing:** chips are computed against the displayed document.
+When `cvFr` is shown, the same required set is scanned against French text
+— tech keywords (React, Docker, CI/CD…) stay untranslated, so results agree
+in practice; occasional flips are accepted noise for a personal tool. Do
+not build a second keyword set for `cvFr`.
 
 ---
 
@@ -366,8 +404,8 @@ noise for a personal tool. Do not build a second analysis for `cvFr`.
 
 The `/docs` "Try it out" shows field names but never *what goes inside*.
 Below is one complete `MasterProfile` — use it as the body for
-`PUT /api/profile`, then the other calls have real data to chew on. Same
-values as `frontend/mock/profile.ts`.
+`PUT /api/profile`, then the other calls have real data to chew on (same
+values the app shipped with in the old mock phase).
 
 ```json
 {
@@ -461,11 +499,6 @@ values as `frontend/mock/profile.ts`.
   "certifications": [
     { "id": "cert-aws", "name": "AWS Certified Cloud Practitioner", "issuer": "Amazon Web Services", "year": "2024" }
   ],
-  "aiIntelligence": {
-    "masterKeywords": ["React", "TypeScript", "Next.js", "Node.js", "PostgreSQL", "Docker", "CI/CD", "Tailwind CSS", "FastAPI", "Redis", "Git", "Agile"],
-    "baselineSummary": "Full-Stack Developer with 3 years of experience across React, TypeScript, Node.js, and PostgreSQL — ships fast, maintainable features end to end.",
-    "lastExtractedAt": "2026-10-29T10:00:00.000Z"
-  },
   "updatedAt": "2026-10-29T10:00:00.000Z"
 }
 ```
@@ -488,38 +521,39 @@ Requirements:
 ### Test checklist (run in `/docs`, in this order)
 
 1. `PUT /api/profile` with the JSON above → `200`, fresh `updatedAt`
+   (no `aiIntelligence` key anywhere — old ones in stored JSON are ignored)
 2. `GET /api/profile` → same profile back
-3. `POST /api/jobs` `{"description": "<JD above>"}` → **do this BEFORE
-   extract-intelligence** (on the fallback path the required set comes
-   from the `masterKeywords` saved in step 1, incl. `Agile`)
-   - **fallback expected** (no key): `aiUsed: false`, `cv` = profile
-     verbatim, title = "Frontend Developer at Northwind Labs — Remote"
-     (first line, ≤80 chars), company = ""
-   - expected analysis: required = {react, typescript, next.js, tailwind
-     css, git, agile} → `matched` = React, TypeScript, Next.js, Tailwind
-     CSS, Git (5), `missing` = ["Agile"], `score` = **83**
-   - **with a key**: `aiUsed: true`, `cv` visibly rewritten for the JD,
-     title/company detected, `required` = the model's `requiredKeywords`
-     read from the JD — for this JD expect the same 6 keywords → same
-     **83** (the model's opinion about *matches* is never trusted without
-     the substring check; only its reading of the JD is used)
-4. `POST /api/jobs/{id}/translate` `{"target":"fr"}`:
-   - no key → `{"aiUsed": false, "cvFr": null, "language": "en"}`
+3. `POST /api/jobs` `{"description": "<JD above>"}`:
+   - **with a key** → `201`, `aiUsed: true`, `cv` visibly rewritten for the
+     JD, title "Frontend Developer" / company "Northwind Labs", and
+     `keywords` = the model's cleaned list. Expect ~6 entries covering
+     React, TypeScript, Next.js, Tailwind CSS, Git (required, found in the
+     profile) + Agile (required, missing from the CV) — score would be
+     **83**. Spot-check cleaning: terms stripped, aliases ≤5 and
+     not equal to the term, tier present on every entry.
+   - **AI down (no key / quota)** → `503` with readable `detail`, and
+     `GET /api/jobs` still shows **no new row**
+   - model returns no keywords → `503`, no row (same check)
+4. `GET /api/jobs` → card `score`/`matchedCount`/`missingCount` equal
+   `score_keywords(cv, keywords)` — i.e. required-only counts computed
+   against the CV text (optional keywords never counted)
+5. `POST /api/jobs/{id}/translate` `{"target":"fr"}`:
    - with key → `cvFr` = French copy (structure/ids intact, dates
      localized), `language: "fr"`, **saved on the row**
    - repeat the call → returns the SAVED `cvFr` with `aiUsed: false`
      (no model call — the quota rule); `{"force": true}` re-runs the model
-5. `PATCH /api/jobs/{id}` `{"language":"en"}` → `200`, `language` flips;
+   - AI fails → `503`, `cvFr` still null, `language` unchanged
+6. `PATCH /api/jobs/{id}` `{"language":"en"}` → `200`, `language` flips;
    `{"language":"fr"}` on a job with `cvFr: null` → `422`
-6. `POST /api/profile/extract-intelligence` → `{ "aiUsed": false, "data":
-   {...} }` locally (AI branch later); a later `GET` shows it merged in
 7. `DELETE /api/profile` → `200` with the empty structure; `GET` → empty
+
+(There is no extract-intelligence step anymore — #4 is gone.)
 
 ---
 
 ## 5. Endpoints, page by page
 
-### Page 1 — Profile (`/profile`) — 4 endpoints, no AI design work
+### Page 1 — Profile (`/profile`) — 3 endpoints, no AI
 
 #### `GET /api/profile`
 - On mount. No body. Unknown profile → `200` with the **empty structure**
@@ -536,7 +570,6 @@ Requirements:
   "projects": [],
   "education": [],
   "certifications": [],
-  "aiIntelligence": { "masterKeywords": [], "baselineSummary": "", "lastExtractedAt": null },
   "updatedAt": "<ISO now>"
 }
 ```
@@ -545,25 +578,17 @@ Requirements:
 - Debounced autosave of every edit. Body: full `MasterProfile`. Response
   `200`: stored profile with fresh `updatedAt`. **Full replace** — replace
   the entire JSON, nothing merged. `422` malformed body.
+- Unknown keys in the body (e.g. an old stored `aiIntelligence` block) are
+  ignored by the schema and dropped on save — dead data clears itself on
+  the first write, nothing reads it.
 
 #### `DELETE /api/profile`
 - The "Reset data" button (client confirms first). Response `200`: the same
   empty structure as a first-time GET. (Not 204 — the client adopts the
   returned object as its new state.)
 
-#### `POST /api/profile/extract-intelligence`  ⚡ AI
-- The explicit "Save & extract" button. The only AI call on this page. The
-  server reads the stored profile itself — no body.
-- **AI path (yours to add):** flash model → `{masterKeywords, baselineSummary}`
-  as JSON → validate → `200 {aiUsed: true, data}`.
-- **Fallback (already built — `derive_intelligence()`):** local derivation
-  from `skillGroups.skills` + `experience[].technologies` +
-  `projects[].techStack` (max 15) + a template summary → same shape,
-  `aiUsed: false`. On ANY AI failure, fall through to it. Never 500.
-- Server merges `data` into the stored profile (`aiIntelligence` + new
-  `updatedAt`); client replaces its `aiIntelligence` block.
-- Why it matters: `masterKeywords` is the dictionary every job analysis runs
-  on (4b) and `baselineSummary` is the seed for generation prompts.
+(There is no `POST /api/profile/extract-intelligence` — #4 was retired
+2026-11-22. Keywords are per-job now; the profile page has no AI buttons.)
 
 ### Page 2 — Home (`/`) + New CV (`/jobs/new`)
 
@@ -571,59 +596,73 @@ Requirements:
 - Home mount → `JobCard[]` newest first, `[]` when none. No CV payloads:
 
 ```ts
-// score/matchedCount/missingCount come from analysis; hasFr = cv_fr IS NOT NULL
+// score/matchedCount/missingCount computed AT READ via score_keywords(cv, keywords)
+// (required tier only — cards don't ship cv/keywords, so the client can't);
+// hasFr = cv_fr IS NOT NULL
 ```
 
 #### `POST /api/jobs`  ⚡ AI — THE endpoint. The CV is born here
 - Body: `{ "description": "<full pasted JD>" }` (empty after trim → `422`,
   cap ~50k chars).
-- **AI path:**
+- Steps:
   1. Load the single profile → `404` if never saved (frontend gates on it,
      but enforce it)
-  2. **Generate the tailored CV** from profile + JD, strict timeout, small
-     flash model, JSON out:
-     - copied verbatim, untouched: `contact`, `education`, `certifications`
-       (and `aiIntelligence`)
-     - AI-rewritten: `summary`, `experience`, `projects` — hard rules:
-       reuse ONLY real entries from the profile (drop irrelevant ones),
-       order by relevance to the JD, rewrite bullets to satisfy the JD
-       where the profile's facts support it, keep every number/claim real
-       (= taken from the profile), **never invent** employers, projects,
-       numbers or skills — if a JD keyword has no factual base it stays
-       out (it then shows as a missing chip, which is the app's point)
+  2. **Generate** with a strict timeout, small flash model, JSON out:
+      - copied verbatim, untouched: `contact`, `education`,
+        `certifications`
+      - AI-rewritten: `summary`, `experience`, `projects`, `skillGroups` —
+        hard rules:
+        reuse ONLY real entries from the profile (drop irrelevant ones),
+        order by relevance to the JD; kept entries keep ALL their bullets
+        and technologies (reworded, never dropped), figures/dates copied
+        verbatim (never recomputed), **never invent** facts; whenever a
+        keyword is backed by profile facts/tools, its exact `term` string
+        must appear in summary or a bullet (so chips go green honestly);
+        JD codes/phrases woven in naturally (no "Mentioning X").
+        `skillGroups` may be regrouped/reordered/renamed, but the exact
+        skill multiset must survive — `validate_skill_groups()` rejects
+        drops, inventions and duplicates (503, no row).
      - also return `title` (from the JD) and `company` (detect if present)
-     - also return `requiredKeywords` — the JD's concrete demands
-       (short skill/tool/practice strings, not sentences); this is the
-       `required` set for Rule 2 (Option B, 2026-11-17)
+     - also return **`keywords: [{term, aliases, tier}]`** — scan the
+       ENTIRE JD (intro, stack, responsibilities, required, bonus) and
+       include EVERY concrete skill/tool/language/framework/protocol/
+       practice, even lowercase items (kafka -> Kafka) and skills the
+       candidate lacks; skip soft-skill clichés. `tier` required/optional,
+       `aliases` spellings/phrasings of the SAME concept. Cleaned per 4b
+       Rule 2; empty → fail. No cap — ~25 terms is normal.
+     - also return `application_notes`: 3-4 short strings for non-skill
+       requirements (years, location, language, links/codes). The model
+       returns it but the code currently IGNORES it — not stored, not
+       shown; schema + UI are planned later.
      - entry ids must be the profile's existing `exp-*` / `prj-*` ids —
        entries with unknown ids are dropped (the never-invent check)
-  3. **Analyze** the generated CV per 4b through the same
-     `cv_text()` + `analyze_for_job()` helpers the fallback uses —
-     `required` = the model's `requiredKeywords` (AI path) or Rule 3's
-     filter (fallback) — never the model's opinion about matches without
-     the substring check
-  4. `createdAt = now`, `language = "en"`, `cvFr = null`, `fileName` unset
-  5. Insert with `ai_used = true`, return the full `Job` → `201`
-- **Fallback (exists today):** same steps except step 2 freezes the profile
-  copy (`job.cv` = stored profile verbatim), title = first non-empty JD
-  line (strip `#`, ≤80), company = "", `ai_used = false`. On ANY AI
-  exception → fall through here. Never a 500.
-- Response `201`: the full `Job` — `aiUsed` says which path ran (client
-  shows a matching toast and adopts the CV either way).
+   3. **Validate everything**: Pydantic model, keyword cleaning, id-list
+      and skill-multiset guards. ANY failure (bad JSON, no keywords, no
+      reusable experience/projects, skill dropped/invented) → raise
+  4. **On ANY exception → `503`** `{ "detail": "AI couldn't generate a CV —
+     nothing was created. Try again in a moment." }` — no row is written,
+     transaction rolled back. There is NO freeze/fake fallback.
+  5. Success: `createdAt = now`, `language = "en"`, `cvFr = null`,
+     `fileName` unset, `analysis` column = the cleaned keyword list, insert
+     with `ai_used = true` → `201`
+- Response `201`: the full `Job` — `keywords` in place, `aiUsed: true`
+  (always true today: #6 is AI-required; the field stays so the UI can
+  tell the story and so a future non-AI path has a signal).
 
 #### `DELETE /api/jobs/{id}`
 - Trash icon on a home card, after confirm. Deletes the row (its `cv`,
-  `cv_fr` and `analysis` live in the row — nothing else to clean).
+  `cv_fr` and keyword list live in the row — nothing else to clean).
 - `204 No Content`. Unknown id → `404`.
 
 ### Page 3 — Workspace (`/jobs/{id}`) — 5 endpoints
 
 #### `GET /api/jobs/{id}`
 - Workspace mount — the whole screen renders from it. `200`: full `Job`
-  (incl. `cv`, `cvFr`, `description`, `analysis`). Unknown →
+  (incl. `cv`, `cvFr`, `description`, `keywords`). Unknown →
   `404 { "detail": "job not found" }`.
-- The analysis always exists — `POST /api/jobs` sets it at creation. No
-  "no analysis yet" state, no separate analyze endpoint.
+- `keywords` always exist — creation fails without them. No
+  "no analysis yet" state, no separate analyze endpoint; the workspace
+  scans client-side (4b Rule 5).
 
 #### `PATCH /api/jobs/{id}`
 - Top-bar renames + the EN/FR toggle. Partial body, only what changed:
@@ -646,19 +685,25 @@ Requirements:
 #### `POST /api/jobs/{id}/translate`  ⚡ AI — save once, never re-pay
 - Body: `{ "target": "fr", "force": false }` (only `"fr"` in v1 → else
   `422`).
-- **Cache rule (quota safety):** if `cv_fr` already exists and `force` is
-  not true → return `200 {aiUsed: false, cvFr: <saved>, language: "fr"}`
-  **without calling the model**. This is the "I'm broke" requirement: a
-  translated CV is paid for once.
+- **Cache rule (quota safety), checked FIRST:** if `cv_fr` already exists
+  and `force` is not true → return `200 {aiUsed: false, cvFr: <saved>,
+  language: "fr"}` **without calling the model** (and flip the active
+  language to fr). This is the "I'm broke" requirement: a translated CV is
+  paid for once. `aiUsed: false` here means *cache hit*, not failure.
 - **AI path:** load `cv` (source) → flash model: translate every string
   value to French, **keep JSON structure, all ids, and tech/product names
   (React, Docker, Next.js…) untranslated**, localize dates
   ("Feb 2023" → "févr. 2023", `endDate: null` → "Aujourd'hui") → validate
-  against your Pydantic schema (drop/fix on mismatch) → save `cv_fr`, set
+  against the Pydantic schema **and the id-list structure guard**
+  (experience/project ids must equal the source's — a garbled reply can't
+  rewrite your structure) → code wins on machine timestamps (`updatedAt`,
+  `lastExtractedAt`) → save `cv_fr` (full JSONB reassign), set
   `language = "fr"` → `200 {aiUsed: true, cvFr, language}`.
-- **Fallback (no key / quota / timeout, ≤ ~10 s):** `cv_fr` stays as it is
-  (or null) → `200 {aiUsed: false, cvFr: <existing or null>, language:
-  <unchanged>}`. Never 500. Client toasts "AI unavailable".
+- **Model failure (no key / quota / timeout / bad output / guard trip):**
+  rollback → `503` `{ "detail": "The French version couldn't be generated —
+  AI is unavailable. Try again in a moment." }` — `cv_fr` stays as it was
+  (usually null), `language` unchanged. Client toasts the detail. Never a
+  fake translation, never a raw `500`.
 
 #### `POST /api/jobs/{id}/integrate-missing`  ⚡ AI
 - "Ask AI" under the missing-keyword chips — the workspace's other explicit
@@ -683,42 +728,49 @@ Requirements:
   numbers; write in the CV's own language (tech names as-is); **return ONLY
   raw JSON**. Seconds, not minutes; strict timeout. No cache rule (unlike
   #12) — every call is one model request.
-- Save path (mirror #12): validate against your Pydantic → structure guard
+- Save path (mirror #12): validate against Pydantic → structure guard
   (experience/project id lists must equal the source's) → locked-section
   check (contact, education, certifications deep-equal the source) → code
   wins on `updatedAt`/`lastExtractedAt` → reassign `cv` or `cv_fr`
   (JSONB: full reassign, never in-place mutation) → commit.
-- Response `200` (AI path): `{ "aiUsed": true, cv, cvFr }` — both documents
-  back (one unchanged), client adopts. **No analysis in the body**:
-  requirements never change, so the client's live scan re-checks the new
-  CV text against the stored required set (green flips on its own).
-- Response `200` (fallback): same shape, active document **unchanged**
-  (`rollback`), `aiUsed: false` → client advisory toast ("AI unavailable —
-  edit manually"). Never 500.
+- Response `200`: `{ "aiUsed": true, cv, cvFr }` — both documents back
+  (one unchanged), client adopts. **No keywords in the body**: requirements
+  don't change, so the client's live scan re-checks the new CV text against
+  the stored `job.keywords` (chips flip on their own).
+- **Model failure (or any guard trips):** rollback → `503`
+  `{ "detail": "AI couldn't complete the edit — nothing was changed. Try
+  again in a moment." }` — the saved document is untouched, client toasts
+  the detail and keeps local state. Never a silent no-op `200`, never a
+  raw `500`.
 
 #### Frontend-only features — build NO endpoints for these
 | Feature | Why it needs no backend |
 |---|---|
-| Live keyword scan (green flips, live score) | local text search over the displayed CV |
+| Live keyword scan (chips green/red/orange, live score) | local scan over the displayed CV against `job.keywords` (4b Rule 5) |
 | Keyword click → highlight / scroll in the CV | DOM/CSS, already built |
 | Room quick-add | one skill edit → rides on `PUT .../cv` |
 | Print / Save as PDF | `window.print()`; filename via `document.title` |
-| Completeness %, home card dots | computed in the browser |
+| Completeness % | computed in the browser |
 | EN/FR toggle UI state | PATCH `language` only when the user switches |
+
+(Home-card score/counts are the opposite: computed **server-side at read**,
+because cards ship neither `cv` nor `keywords` — see `GET /api/jobs`.)
 
 ---
 
-## 6. Swap map — what replaces what in the frontend code
+## 6. Swap map — what replaced what in the frontend code
 
-| Today (mock) | Becomes | File |
+> The swap completed 2026-11-17; this table is kept for reference.
+
+| Old mock helper | Became | File |
 |---|---|---|
 | read/write localStorage profile | `GET/PUT /api/profile` | `lib/profile-store.ts` |
 | read/write localStorage jobs | `GET /api/jobs`, `GET/PATCH/PUT/DELETE /api/jobs/{id}...` | `lib/jobs-store.ts` |
-| `mockAnalyze()` | `POST /api/jobs` (created with response) | `mock/generate.ts` |
-| `mockExtractIntelligence()` | `POST /api/profile/extract-intelligence` | `mock/generate.ts` |
-| `mockAutoFit()` | `POST /api/jobs/{id}/integrate-missing` | `mock/generate.ts` |
+| `mockAnalyze()` | `POST /api/jobs` (created with response) | deleted with `frontend/mock/` |
+| `mockExtractIntelligence()` | **deleted** — #4 no longer exists | — |
+| `mockAutoFit()` | `POST /api/jobs/{id}/integrate-missing` | deleted with `frontend/mock/` |
 | translate button (mock: honest "needs backend" toast) | `POST /api/jobs/{id}/translate` | workspace |
-| `withDelay()` fake spinners | delete — real network latency | `mock/index.ts` |
+| `withDelay()` fake spinners | deleted — real network latency | — |
 
 Expected runtime after the swap: same screens, same states, same spinners —
 only the storage behind them changes.
@@ -732,65 +784,57 @@ only the storage behind them changes.
 | 1 | GET | `/api/profile` | no | Profile |
 | 2 | PUT | `/api/profile` | no | Profile |
 | 3 | DELETE | `/api/profile` | no | Profile |
-| 4 | POST | `/api/profile/extract-intelligence` | **yes** (fallback local, exists) | Profile |
-| 5 | GET | `/api/jobs` | no | Home |
-| 6 | POST | `/api/jobs` | **yes** (fallback freeze, exists) | New CV |
+| ~~4~~ | ~~POST~~ | ~~`/api/profile/extract-intelligence`~~ | — | **retired 2026-11-22** (#4 deleted; numbers below NOT renumbered — code comments still say #6/#11/#12) |
+| 5 | GET | `/api/jobs` | no (counts computed at read) | Home |
+| 6 | POST | `/api/jobs` | **yes** (failure → 503, no fallback) | New CV |
 | 7 | GET | `/api/jobs/{id}` | no | Workspace |
 | 8 | PATCH | `/api/jobs/{id}` | no | Workspace |
 | 9 | PUT | `/api/jobs/{id}/cv` | no | Workspace |
 | 10 | DELETE | `/api/jobs/{id}` | no | Home |
-| 11 | POST | `/api/jobs/{id}/integrate-missing` | **yes** (fallback no-op) | Workspace |
-| 12 | POST | `/api/jobs/{id}/translate` | **yes** (fallback: reuse/null) | Workspace |
+| 11 | POST | `/api/jobs/{id}/integrate-missing` | **yes** (failure → 503, nothing changed) | Workspace |
+| 12 | POST | `/api/jobs/{id}/translate` | **yes** (cache reuse = 200; failure → 503) | Workspace |
 
-### Build order (agreed 2026-11-10) — loop first, then migrate, then AI
+### Build order (agreed 2026-11-10; COMPLETED — kept as history)
 
-**Step 1 — close the offline loop (endpoints 7-10).** Plain CRUD, no AI, no
-fallback decisions — copy the patterns from your profile router. Against the
-*current* schema (jobs has no `cv_fr` yet; profile routes still have
-`{lang}` — those two change in step 2). Done when all four pass in `/docs`.
+**Step 1 — close the offline loop (endpoints 7-10).** ✅ done 2026-11-10.
 
-**Step 2 — single-profile migration.**
-- Profile router loses `{lang}` → paths become `/api/profile` (drop the
-  `LANGS` guard); `main.py` prefix unchanged
-- DB: profiles table loses `lang`, gains `id` PK with the single value
-  `'master'` (dev shortcut: `DROP TABLE profiles` + let `create_all`
-  rebuild if you have no real data; otherwise a small `ALTER`)
-- `jobs` gains `cv_fr JSONB NULL`; `Job` model + responses gain `cvFr`
-- `CreateJobRequest` loses `language`; new jobs start `language="en"`
-- `PATCH` gains `language` (with the 422 guard), `PUT .../cv` gains its
-  `language` selector, `JobCard` gains `hasFr`
-- Done when the 4c checklist passes on the new paths.
+**Step 2 — single-profile migration.** ✅ done 2026-11-11 (profile routes
+lost `{lang}`, profiles table got `id='master'` PK, jobs gained `cv_fr`,
+`PATCH`/`PUT cv` got `language`, `JobCard` got `hasFr`).
 
-**Step 3 — AI wiring, smallest → biggest.** Each branch: prompt → validate
-with your Pydantic → on ANY exception fall through to existing code →
-never 500. Strict timeouts, flash-class free model.
-1. `app/core/ai.py` — ONE helper: client from `settings.GEMINI_API_KEY`,
-   `call(prompt) -> str | None`, ~10 s timeout, `None` on any failure.
-   The only new infrastructure; every branch uses it.
-2. #4 extract-intelligence AI path (seam and local fallback already exist)
-3. **#6 `generate_job()` AI branch — the product.** The seam already
-   exists; today it freezes. Add the Gemini branch INSIDE `generate_job()`
-   with the hard rules from #6; on any failure the freeze path (already
-   written, ~10 lines) catches it. Do not expand the fallback.
-4. #12 translate (cache rule first, then the model call)
-5. #11 integrate-missing
+**Step 3 — AI wiring.** ✅ done 2026-11-17, then revised 2026-11-22:
+1. `app/core/ai.py` — `call(prompt) -> str | None`, 20 s cap, `None` on
+   any failure ✅
+2. ~~#4 extract-intelligence~~ — **deleted 2026-11-22** with `aiIntelligence`
+3. #6 `generate_job()` — ✅ AI-required: generates CV **and** `keywords`,
+   validates, failure → 503, no row
+4. #12 translate — ✅ cache rule first, failure → 503
+5. #11 integrate-missing — ✅ failure → 503
 
-**Step 4 — frontend swap to fetch** (frontend's job, per the swap map).
+**Step 4 — frontend swap to fetch** ✅ done 2026-11-17 (see §6).
+
+**Step 5 — keyword redesign (2026-11-22).** ✅ `keywords: Keyword[]`
+replaces `analysis`/`aiIntelligence`; word-boundary scan contract (§4b);
+card counts at read; AI failures → 503.
 
 ---
 
-## Appendix — Fallback inventory (already built; DO NOT expand)
+## Appendix — Error policy (replaces the old fallback inventory)
 
-This exists so the demo survives a dead key. That's all. Every AI branch
-above falls through to one of these on failure:
+**AI-required endpoints (#6, #11, #12):** model unavailable, quota hit,
+timeout, bad/garbled output, or a structure guard trip → **`503` with a
+readable `detail`**, transaction rolled back, nothing saved. The client
+toasts the detail. Never a fake CV, never a silent no-op `200`, never a
+raw `500` (catch `Exception` → `raise HTTPException(503, ...)`).
 
-| Where | What already exists |
-|---|---|
-| #4 extract | `derive_intelligence()` in `app/routers/profile.py` — local keywords + template summary |
-| #6 create job | the freeze path in `generate_job()` in `app/routers/job.py` — profile copy + `analyze_for_job()` + first-line title |
-| #11 integrate | return the document unchanged, `aiUsed: false` |
-| #12 translate | return existing `cvFr` (or null), `aiUsed: false` |
-| scan (both sides) | `cv_text()` / `analyze_for_job()` — the comparison never uses AI, ever (only the *input* `required` list may come from #6's model; the fallback filter is `masterKeywords ∩ JD`) |
+**The one `200 aiUsed:false` case:** translate's cache rule — `cv_fr`
+exists and no `force` → the saved copy is returned with zero model calls.
+That's a cache hit (quota rule), not a failure, and it is NOT to be
+removed.
 
-The rule going forward: **no new fallback features.** A fallback is a
-`try/except` around a new AI call that lands on a row above — nothing more.
+**Naturally non-AI, always available:** scan (§4b — pure text matching),
+profile/job CRUD, edits, print, EN/FR toggle.
+
+**The rule going forward: no fallback features.** A `try/except` around an
+AI call lands on a `503` — nothing else. If a feature can't work without
+AI, it says so out loud.
