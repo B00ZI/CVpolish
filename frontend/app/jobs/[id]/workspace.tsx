@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { BackLink, TopBar } from "@/components/top-bar";
-import type { GapAnalysis, Job, Language, MasterProfile } from "@/lib/types";
+import type { Job, Keyword, Language, MasterProfile } from "@/lib/types";
 import {
   getJob,
   integrateJob,
@@ -22,25 +22,26 @@ import {
 } from "@/lib/jobs-store";
 import { errMsg } from "@/lib/api";
 import { defaultCvFileName } from "@/lib/filename";
-import { cvText } from "@/lib/cv-text";
+import { analyzeKeywords, cvText, type ScanResult } from "@/lib/cv-text";
 import { CvPreview } from "./cv-preview";
 
 interface AnalysisBlockProps {
-  analysis: GapAnalysis;
-  /** Did the AI actually generate this CV (true) or did the fallback
-   *  freeze the profile as-is (false)? Drives the green/red status pill. */
+  /** Always true today (#6 is AI-required) — the banner keeps the honest
+   *  signal so a future non-AI path would still show correctly. */
   aiUsed: boolean;
   /** Required keywords present on the CV right now (live scan, 0 API). */
-  matchedLive: string[];
-  /** Required keywords absent from the CV. */
-  missingLive: string[];
-  /** Live match score (recomputed from the scan). */
+  matchedLive: Keyword[];
+  /** Required keywords absent from the CV → red chips. */
+  missingLive: Keyword[];
+  /** Optional keywords absent → orange chips (never counted in score). */
+  optionalMissing: Keyword[];
+  /** Live match score — required tier only. */
   score: number;
   targets: { id: string; label: string }[];
   categories: { id: string; label: string }[];
   onQuickAdd: (kw: string, categoryId: string) => void;
   onNavigate: (targetId: string) => void;
-  onHighlight: (keyword: string) => void;
+  onHighlight: (kw: Keyword) => void;
   autofitting: boolean;
   onAutoFit: (prompt: string) => void;
 }
@@ -144,7 +145,8 @@ export function Workspace({ jobId }: { jobId: string }) {
   /** Persist a CV edit (inline edits + quick add) into the DISPLAYED
    *  document — job.cv when English is active, job.cvFr when French is.
    *  The other version and the master profile stay untouched.
-   *  Debounced PUT; the server recomputes the analysis on write. */
+   *  Debounced PUT; chips/score update live from the new text (nothing
+   *  is recomputed server-side). */
   function updateProfile(fn: (p: MasterProfile) => MasterProfile) {
     if (!profile || !job) return;
     const doc = fn(profile);
@@ -190,33 +192,30 @@ export function Workspace({ jobId }: { jobId: string }) {
             "AI translated it once and saved it — free to view from now on.",
         });
       } else {
-        toast.error("No AI — French version not created", {
-          description: r.cvFr
-            ? "Kept your existing French copy. Nothing changed."
-            : "Nothing was changed. Try again in a moment.",
+        // Cache hit (not a failure): the saved copy came back, zero AI calls.
+        toast.success("French copy reused", {
+          description: "Already translated — shown for free, no AI call.",
         });
       }
     } catch (e) {
-      toast.error("Translate failed", { description: errMsg(e) });
+      toast.error("Couldn't translate", { description: errMsg(e) });
     } finally {
       setTranslating(false);
     }
   }
 
-  // ===== Live scan: every keyword (matched + missing) re-checked against
-  // the CV on each edit — both directions stay truthful. No "add anyway":
-  // a keyword is missing until its text actually lives on the CV. =====
-  const [matchedLive, missingLive, score] = useMemo<[string[], string[], number]>(() => {
-    if (!job || !profile) return [[], [], 0];
-    const a = job.analysis;
-    const text = cvText(profile);
-    const onCv = (kw: string) => text.includes(kw.toLowerCase());
-    const required = [...new Set([...a.matched, ...a.missing])];
-    const inCv = required.filter(onCv);
-    const gone = required.filter((kw) => !onCv(kw));
-    const total = required.length || 1;
-    return [inCv, gone, Math.round((inCv.length / total) * 100)];
+  // ===== Live scan — THE one scan (API.md §4b Rule 5): the displayed CV
+  // is re-checked against job.keywords on every edit. Word-boundary match,
+  // tiers honored, nothing stored anywhere. =====
+  const scan = useMemo<ScanResult>(() => {
+    if (!job || !profile)
+      return { score: 0, found: [], missing: [], optionalMissing: [] };
+    return analyzeKeywords(cvText(profile), job.keywords);
   }, [profile, job]);
+  const matchedLive = scan.found;
+  const missingLive = scan.missing;
+  const optionalMissing = scan.optionalMissing;
+  const score = scan.score;
 
   // Navigation targets in the CV (edits where keywords can land manually)
   const targets = useMemo<{ id: string; label: string }[]>(() => {
@@ -285,10 +284,10 @@ export function Workspace({ jobId }: { jobId: string }) {
     hitTimer.current = window.setTimeout(clearHits, 3000);
   }
 
-  /** Word-level keyword hit: only the exact word(s) turn emerald ~3s,
-   *  via the CSS Custom Highlight API (no DOM mutation, React-safe).
-   *  Old browsers fall back to whole-span block highlight. */
-  function highlight(keyword: string) {
+  /** Word-level keyword hit: the term AND its aliases — only the exact
+   *  word(s) turn emerald ~3s, via the CSS Custom Highlight API (no DOM
+   *  mutation, React-safe). Old browsers fall back to span highlight. */
+  function highlight(kw: Keyword) {
     const root = document.getElementById("cv-preview");
     if (!root) return;
     clearHits();
@@ -301,29 +300,33 @@ export function Workspace({ jobId }: { jobId: string }) {
       window as unknown as { Highlight?: new (...r: Range[]) => unknown }
     ).Highlight;
 
-    // Collect a Range per occurrence, walking all text nodes of the CV
+    // Collect a Range per occurrence of the term OR any alias
+    const needles = [kw.term, ...kw.aliases]
+      .map((n) => n.trim().toLowerCase())
+      .filter(Boolean);
     const ranges: Range[] = [];
-    const kw = keyword.toLowerCase();
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     let node = walker.nextNode();
     while (node) {
       const text = (node as Text).data.toLowerCase();
-      let from = 0;
-      let idx = text.indexOf(kw, from);
-      while (idx !== -1) {
-        const r = new RangeCtor();
-        r.setStart(node, idx);
-        r.setEnd(node, idx + kw.length);
-        ranges.push(r);
-        from = idx + kw.length;
-        idx = text.indexOf(kw, from);
+      for (const needle of needles) {
+        let from = 0;
+        let idx = text.indexOf(needle, from);
+        while (idx !== -1) {
+          const r = new RangeCtor();
+          r.setStart(node, idx);
+          r.setEnd(node, idx + needle.length);
+          ranges.push(r);
+          from = idx + needle.length;
+          idx = text.indexOf(needle, from);
+        }
       }
       node = walker.nextNode();
     }
 
     if (ranges.length === 0) {
       toast("Not on the CV (yet)", {
-        description: `"${keyword}" appears nowhere in your CV text right now.`,
+        description: `"${kw.term}" appears nowhere in your CV text right now.`,
       });
       return;
     }
@@ -358,7 +361,7 @@ export function Workspace({ jobId }: { jobId: string }) {
   }
 
   /** "Ask AI": one free-text prompt → POST integrate-missing against the
-   *  ACTIVE document. Fallback leaves the CV untouched (aiUsed: false). */
+   *  ACTIVE document. A 503 (AI down) lands in catch — CV untouched. */
   async function autoFit(prompt: string) {
     if (autofitting || missingLive.length === 0 || !job) return;
     setAutofitting(true);
@@ -370,18 +373,12 @@ export function Workspace({ jobId }: { jobId: string }) {
       );
       const doc = job.language === "fr" ? r.cvFr : r.cv;
       if (doc) setProfile(doc);
-      if (r.aiUsed) {
-        flashCv();
-        toast.success("AI applied your edit", {
-          description: "Check the CV — your prompt was woven in.",
-        });
-      } else {
-        toast.error("No AI — CV unchanged", {
-          description: "Edit it manually or try again in a moment.",
-        });
-      }
+      flashCv();
+      toast.success("AI applied your edit", {
+        description: "Check the CV — your prompt was woven in.",
+      });
     } catch (e) {
-      toast.error("AI edit failed", { description: errMsg(e) });
+      toast.error("Couldn't run the AI edit", { description: errMsg(e) });
     } finally {
       setAutofitting(false);
     }
@@ -441,22 +438,20 @@ export function Workspace({ jobId }: { jobId: string }) {
           {/* ===== Left: match & gaps (its own scroll) + pinned finish bar ===== */}
           <aside className="flex flex-col gap-6 print:hidden lg:h-full lg:pr-3">
             <div className="cv-scroll min-h-0 flex-1 space-y-8 overflow-y-auto pr-0">
-              {job.analysis ? (
-                <AnalysisBlock
-                  analysis={job.analysis}
-                  aiUsed={job.aiUsed ?? false}
-                  matchedLive={matchedLive}
-                  missingLive={missingLive}
-                  score={score}
-                  targets={targets}
-                  categories={categories}
-                  onQuickAdd={quickAdd}
-                  onNavigate={navigate}
-                  onHighlight={highlight}
-                  autofitting={autofitting}
-                  onAutoFit={autoFit}
-                />
-              ) : null}
+              <AnalysisBlock
+                aiUsed={job.aiUsed ?? false}
+                matchedLive={matchedLive}
+                missingLive={missingLive}
+                optionalMissing={optionalMissing}
+                score={score}
+                targets={targets}
+                categories={categories}
+                onQuickAdd={quickAdd}
+                onNavigate={navigate}
+                onHighlight={highlight}
+                autofitting={autofitting}
+                onAutoFit={autoFit}
+              />
             </div>
 
             {/* Always-visible finish bar */}
@@ -671,10 +666,10 @@ function FileChip({
 // ===== Score + keyword chips with the 3 actions =====
 
 function AnalysisBlock({
-  analysis,
   aiUsed,
   matchedLive,
   missingLive,
+  optionalMissing,
   score,
   targets,
   categories,
@@ -756,19 +751,19 @@ function AnalysisBlock({
         ) : (
           <div className="mt-3 flex flex-wrap gap-2">
             {matchedLive.map((kw) => (
-              <MatchedChip key={kw} keyword={kw} onHighlight={onHighlight} />
+              <MatchedChip key={kw.term} kw={kw} onHighlight={onHighlight} />
             ))}
           </div>
         )}
       </section>
 
-      {/* Missing */}
+      {/* Missing (required only — these drive the score) */}
       <section>
         <h2 className="text-base font-medium">Missing from your data</h2>
         {missingLive.length === 0 ? (
           <p className="mt-1.5 flex items-center gap-1.5 text-sm text-emerald-700 dark:text-emerald-400">
             <Check className="h-3.5 w-3.5" />
-            You cover every keyword this job lists.
+            You cover every required keyword this job lists.
           </p>
         ) : (
           <>
@@ -779,11 +774,11 @@ function AnalysisBlock({
             <div className="mt-3 flex flex-wrap gap-2">
               {missingLive.map((kw) => (
                 <MissingChip
-                  key={kw}
-                  keyword={kw}
+                  key={kw.term}
+                  kw={kw}
                   targets={targets}
                   categories={categories}
-                  onQuickAdd={(catId) => onQuickAdd(kw, catId)}
+                  onQuickAdd={(catId) => onQuickAdd(kw.term, catId)}
                   onNavigate={(targetId) => onNavigate(targetId)}
                 />
               ))}
@@ -845,27 +840,49 @@ function AnalysisBlock({
           </>
         )}
       </section>
+
+      {/* Optional (nice-to-have) — orange, never counted in the score */}
+      {optionalMissing.length > 0 ? (
+        <section>
+          <h2 className="text-base font-medium">Nice to have</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Listed as optional in the job post — they don&apos;t affect your
+            score.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {optionalMissing.map((kw) => (
+              <span
+                key={kw.term}
+                className="inline-flex items-center rounded-full border border-orange-200 bg-orange-50 py-1 pl-2.5 pr-3 text-sm text-orange-800 dark:border-orange-900 dark:bg-orange-950 dark:text-orange-300"
+              >
+                {kw.term}
+              </span>
+            ))}
+          </div>
+        </section>
+      ) : null}
     </>
   );
 }
 
-/** Green chip — click flashes every CV spot where the keyword appears. */
+/** Green chip — click flashes every CV spot where the keyword (or any of
+ *  its aliases) appears. */
 function MatchedChip({
-  keyword,
+  kw,
   onHighlight,
 }: {
-  keyword: string;
-  onHighlight: (kw: string) => void;
+  kw: Keyword;
+  onHighlight: (kw: Keyword) => void;
 }) {
   return (
     <button
       type="button"
-      onClick={() => onHighlight(keyword)}
+      onClick={() => onHighlight(kw)}
       title="Show on the CV"
       className="cursor-pointer inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 py-1 pl-2.5 pr-3 text-sm text-emerald-800 transition-colors hover:bg-emerald-100 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300 dark:hover:bg-emerald-900"
     >
       <Check className="h-3 w-3" />
-      {keyword}
+      {kw.term}
     </button>
   );
 }
@@ -873,13 +890,13 @@ function MatchedChip({
 // ===== Missing keyword chip: quick add to skills / navigate to edit =====
 
 function MissingChip({
-  keyword,
+  kw,
   targets,
   categories,
   onQuickAdd,
   onNavigate,
 }: {
-  keyword: string;
+  kw: Keyword;
   targets: { id: string; label: string }[];
   categories: { id: string; label: string }[];
   onQuickAdd: (categoryId: string) => void;
@@ -893,13 +910,13 @@ function MissingChip({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 py-1 pl-2.5 pr-3 text-sm text-amber-800 transition-colors hover:bg-amber-100 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300"
+          className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 py-1 pl-2.5 pr-3 text-sm text-red-800 transition-colors hover:bg-red-100 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
         >
-          {keyword}
+          {kw.term}
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-96 space-y-4">
-        <p className="text-sm font-medium">{keyword}</p>
+        <p className="text-sm font-medium">{kw.term}</p>
 
         {/* 1 — Quick add to skills (client-side, 0 tokens) */}
         <div>
@@ -914,7 +931,7 @@ function MissingChip({
                 onClick={() => {
                   onQuickAdd(c.id);
                   toast("Added to skills", {
-                    description: `${keyword} → ${c.label}. It turns green in the CV instantly.`,
+                    description: `${kw.term} → ${c.label}. It turns green in the CV instantly.`,
                   });
                   close();
                 }}

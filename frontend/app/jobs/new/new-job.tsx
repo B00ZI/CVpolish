@@ -21,19 +21,12 @@ export function NewJob() {
     if (!canAnalyze || busy) return;
     setBusy(true);
     try {
-      // One call: validate, generate the tailored CV (AI, fallback to a
-      // profile freeze), scan the JD — server does title/company too.
+      // One call: AI generates the tailored CV + keyword list; a 503 (AI
+      // down) throws → caught below, nothing was created server-side.
       const job = await createJob(description.trim());
-      if (job.aiUsed) {
-        toast.success("AI tailored your CV", {
-          description: "Summary and bullets rewritten for this job.",
-        });
-      } else {
-        toast.error("No AI — saved without tailoring", {
-          description:
-            "Your profile was copied as-is (key/quota/timeout). Try again later for a full rewrite.",
-        });
-      }
+      toast.success("AI tailored your CV", {
+        description: "Summary and bullets rewritten for this job.",
+      });
       router.push(`/jobs/${job.id}`);
     } catch (e) {
       toast.error("Couldn't create the CV", { description: errMsg(e) });

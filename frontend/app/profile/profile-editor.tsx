@@ -9,7 +9,6 @@ import { profileCompleteness } from "@/lib/completeness";
 import {
   clearProfile,
   emptyProfile,
-  extractIntelligence,
   loadProfile,
   saveProfile,
 } from "@/lib/profile-store";
@@ -21,7 +20,6 @@ import {
   ContactSection,
   EducationSection,
   ExperienceSection,
-  AiIntelligenceSection,
   ProjectsSection,
   SkillsSection,
   SummarySection,
@@ -35,7 +33,6 @@ const SECTIONS = [
   { id: "projects", label: "Projects" },
   { id: "education", label: "Education" },
   { id: "certifications", label: "Certifications" },
-  { id: "ai-intelligence", label: "AI intelligence" },
 ] as const;
 
 export type Update = (fn: (p: MasterProfile) => MasterProfile) => void;
@@ -43,7 +40,6 @@ export type Update = (fn: (p: MasterProfile) => MasterProfile) => void;
 export function ProfileEditor() {
   const [profile, setProfile] = useState<MasterProfile>(emptyProfile);
   const [active, setActive] = useState<string>("contact");
-  const [aiBusy, setAiBusy] = useState<string | null>(null);
   const loaded = useRef(false);
   const firstSave = useRef(true);
 
@@ -104,7 +100,8 @@ export function ProfileEditor() {
   const update: Update = (fn) => setProfile((p) => fn(p));
 
   // Summary rewrite has no backend endpoint yet — stay honest instead of
-  // faking a spinner (AI is never required).
+  // faking a spinner. (Keyword extraction died with #4 — keywords are
+  // per-job now, read from the JD at CV creation.)
   async function runAi() {
     toast("Not wired yet", {
       description:
@@ -121,35 +118,6 @@ export function ProfileEditor() {
       toast("Reset", { description: "Profile cleared." });
     } catch (e) {
       toast.error("Reset failed", { description: errMsg(e) });
-    }
-  }
-
-  async function extract() {
-    setAiBusy("intelligence");
-    try {
-      // Flush pending edits first — extraction reads the SAVED profile.
-      await saveProfile(profile);
-      const r = await extractIntelligence();
-      // The server usually saved the result already; adopt it. Guard: a
-      // fallback on a never-saved profile returns empty data without
-      // saving — never wipe local keywords with that.
-      if (r.aiUsed || r.data.masterKeywords.length > 0) {
-        update((p) => ({ ...p, aiIntelligence: r.data }));
-      }
-      if (r.aiUsed) {
-        toast.success("Keywords extracted by AI", {
-          description: `${r.data.masterKeywords.length} keywords saved to your profile.`,
-        });
-      } else {
-        toast.error("No AI — keywords kept", {
-          description:
-            "Your current keywords stay as they are. Try again in a moment.",
-        });
-      }
-    } catch (e) {
-      toast.error("Extraction failed", { description: errMsg(e) });
-    } finally {
-      setAiBusy(null);
     }
   }
 
@@ -250,12 +218,6 @@ export function ProfileEditor() {
           <ProjectsSection profile={profile} update={update} />
           <EducationSection profile={profile} update={update} />
           <CertificationsSection profile={profile} update={update} />
-          <AiIntelligenceSection
-            profile={profile}
-            update={update}
-            busy={aiBusy === "intelligence"}
-            onExtract={extract}
-          />
 
           <footer className="border-t border-border pt-6 text-xs text-muted-foreground">
             Autosaves to your profile — every change is stored a moment after
