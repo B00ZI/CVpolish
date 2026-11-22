@@ -1,10 +1,12 @@
 """Profile endpoints — the whole Page 1 of backend/API.md:
 
-    GET    /api/profile                     -> empty structure first time
-    PUT    /api/profile                     -> full replace (autosave)
-    DELETE /api/profile                     -> back to empty structure
-    POST   /api/profile/extract-intelligence  (AI, always 200 +
-    `aiUsed` fallback)
+    GET    /api/profile    -> empty structure first time
+    PUT    /api/profile    -> full replace (autosave)
+    DELETE /api/profile    -> back to empty structure
+
+(Extract-intelligence #4 was removed 2026-11-22 with the keyword redesign:
+keywords now come from #6's model at job creation, so the profile page
+needs no AI call at all.)
 
 Business logic goes in the endpoint bodies or small helper functions in this
 file; this router is where jobs routers will be added as siblings later
@@ -15,14 +17,9 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-import json
-
 from app.core.database import get_db
-from app.core.ai import call
 from app.models.profile import Profile
 from app.schemas.profile import (
-    AiIntelligence,
-    ExtractResponse,
     MasterProfileResponse,
     ProfileBase,
 )
@@ -66,16 +63,8 @@ def get_profile(db: Session = Depends(get_db)):
 @router.put("", response_model=MasterProfileResponse)
 def update_profile(data: ProfileBase, db: Session = Depends(get_db)):
     payload = data.model_dump()
-    
 
     profile = db.query(Profile).first()
-
-    # Seatbelt: a body that omits aiIntelligence must not erase the
-    # extracted keywords — Pydantic would silently fill the default.
-    if profile is not None and "aiIntelligence" not in data.model_fields_set:
-        payload["aiIntelligence"] = profile.data.get(
-            "aiIntelligence", payload["aiIntelligence"]
-        )
 
     if profile is None:
         new_profile = Profile(data=payload)
@@ -102,88 +91,3 @@ def delete_profile(db: Session = Depends(get_db)):
     db.delete(profile)
     db.commit()
     return empty_profile_response()
-
-
-@router.post("/extract-intelligence", response_model=ExtractResponse)
-def post_intelligence(db: Session = Depends(get_db)):
-   
-
-    profile = db.query(Profile).first()
-    if profile is None:
-        return ExtractResponse(aiUsed=False, data=AiIntelligence())
-
-    res = derive_intelligence(profile.data)
-
-    profile.data = {
-        **profile.data,
-        "aiIntelligence": res.data.model_dump(),
-    }
-    db.commit()
-    db.refresh(profile)
-    return res
-
-
-def derive_intelligence(profile_data: dict) -> ExtractResponse:
-
-    # using ai 
-    prompt = (
-    "Profile: " + json.dumps(profile_data) + "\n"
-    "Extract from it. Reply ONLY with raw JSON, no markdown/fences ignore the aiIntelligence field, "
-    'returned JSON exactly {"masterKeywords": [strings, max 15], "baselineSummary": "~100 words"}'
-        )
-    
-    text = call(prompt)
-
-    try :
-        parsed = json.loads(text)
-        aiRes = AiIntelligence(
-            **parsed ,
-            lastExtractedAt=datetime.now(timezone.utc).isoformat())
-    except Exception :
-        aiRes = None
-
-    if aiRes :
-        return  ExtractResponse(aiUsed= True  , data = aiRes)
-
-
-    # fallback case no ai or ai failier 
-    groups = profile_data.get("skillGroups", [])
-    experience = profile_data.get("experience", [])
-    projects = profile_data.get("projects", [])
-
-    skill_words = [s for g in groups for s in g.get("skills", [])]
-    tech_words = [t for e in experience for t in e.get("technologies", [])]
-    stack_words = [t for p in projects for t in p.get("techStack", [])]
-    
-    keywords = [
-        k
-        for k in dict.fromkeys(skill_words + tech_words + stack_words)
-        if k
-    ][:15]
-
-    title = profile_data.get("contact", {}).get("targetTitle", "")
-    skills = ", ".join(keywords[:6])
-    if title and keywords:
-        summary = f"{title} with hands-on experience in {skills}"
-    elif title:
-        summary = f"{title}"
-    elif keywords:
-        summary = f"Hands-on experience in {skills}"
-    else:
-        summary = ""
-
-    names = [p.get("name", "") for p in projects][:2]
-    names = [n for n in names if n]
-    if names:
-        summary += " — shipped projects including " + " and ".join(names)
-    if summary:
-        summary += "."
-
-
-    newdata =  AiIntelligence(
-        masterKeywords=keywords,
-        baselineSummary=summary,
-        lastExtractedAt=datetime.now(timezone.utc).isoformat(),
-    )
-
-    return  ExtractResponse(aiUsed= False  , data = newdata)

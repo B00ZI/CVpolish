@@ -48,19 +48,21 @@ class TranslateRequest(BaseModel):
 
 # ---------- responses / data ----------
 
-class GapAnalysis(BaseModel):
-    """Result of comparing the JD text against the frozen cv's keywords.
-    Always set at creation — no nullable analysis anywhere."""
-    score: int                    # round(matched / (matched + missing) * 100)
-    matched: List[str] = []
-    missing: List[str] = []
-    notes: dict = {}              # legacy, always {}
-    added: List[str] = []         # legacy, always []
+class Keyword(BaseModel):
+    """One requirement the JD states. `term` is the canonical wording;
+    `aliases` are other spellings the CV might use (postgres → PostgreSQL);
+    `tier` separates hard requirements (red chip) from nice-to-haves
+    (orange chip). Score counts `required` only."""
+    term: str
+    aliases: List[str] = []
+    tier: Literal["required", "optional"] = "required"
 
 
 class JobCard(BaseModel):
     """Light projection for GET /api/jobs (home cards) — never ships cv,
-    description or the analysis object, only what the card renders."""
+    description or keywords, only what the card renders. score/matchedCount/
+    missingCount are computed at read time from cv + keywords (required
+    tier only) — see API.md §4b."""
     id: str
     title: str
     company: str = ""            
@@ -86,7 +88,7 @@ class Job(BaseModel):
     cv: MasterProfileResponse
     cvFr : Optional[MasterProfileResponse] =  None 
     fileName: Optional[str] = None
-    analysis: GapAnalysis
+    keywords: List[Keyword] = []   # set at creation by #6's model; never scored server-side on this doc
     aiUsed: bool = False
 
 

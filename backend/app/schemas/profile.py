@@ -54,11 +54,6 @@ class Certification(BaseModel):
     issuer: str
     year: str
 
-class AiIntelligence(BaseModel):
-    masterKeywords: List[str] = []
-    baselineSummary: str = ""
-    lastExtractedAt: Optional[str] = None  # None = never extracted
-
 class ProfileBase(BaseModel):
     contact: Contact = Field(default_factory=Contact)
     summary: str = ""
@@ -67,13 +62,8 @@ class ProfileBase(BaseModel):
     projects: List[Project] = []
     education: List[Education] = []
     certifications: List[Certification] = []
-    aiIntelligence: AiIntelligence = Field(default_factory=AiIntelligence)
 
 
 
 class MasterProfileResponse(ProfileBase):
     updatedAt: Optional[str] = None
-
-class ExtractResponse(BaseModel):
-    aiUsed: bool
-    data: AiIntelligence
