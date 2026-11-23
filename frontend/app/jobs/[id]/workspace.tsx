@@ -26,17 +26,12 @@ import { analyzeKeywords, cvText, type ScanResult } from "@/lib/cv-text";
 import { CvPreview } from "./cv-preview";
 
 interface AnalysisBlockProps {
-  /** Always true today (#6 is AI-required) — the banner keeps the honest
-   *  signal so a future non-AI path would still show correctly. */
-  aiUsed: boolean;
   /** Required keywords present on the CV right now (live scan, 0 API). */
   matchedLive: Keyword[];
   /** Required keywords absent from the CV → red chips. */
   missingLive: Keyword[];
   /** Optional keywords absent → orange chips (never counted in score). */
   optionalMissing: Keyword[];
-  /** Live match score — required tier only. */
-  score: number;
   targets: { id: string; label: string }[];
   categories: { id: string; label: string }[];
   onQuickAdd: (kw: string, categoryId: string) => void;
@@ -363,7 +358,12 @@ export function Workspace({ jobId }: { jobId: string }) {
   /** "Ask AI": one free-text prompt → POST integrate-missing against the
    *  ACTIVE document. A 503 (AI down) lands in catch — CV untouched. */
   async function autoFit(prompt: string) {
-    if (autofitting || missingLive.length === 0 || !job) return;
+    if (
+      autofitting ||
+      (missingLive.length === 0 && optionalMissing.length === 0) ||
+      !job
+    )
+      return;
     setAutofitting(true);
     try {
       await flushSave(); // AI must read the latest edits
@@ -433,17 +433,24 @@ export function Workspace({ jobId }: { jobId: string }) {
 
       {/* Single view: two independent panes on desktop — the left panel
           is fully pinned (it never moves, no matter how far you scroll) */}
-      <main className="mx-auto max-w-[1600px] px-6 pb-24 pt-8 print:p-0 lg:flex lg:h-full lg:min-h-0 lg:pb-2 lg:pr-3 print:h-auto print:overflow-visible">
-        <div className="grid gap-10 lg:h-full lg:w-full lg:grid-cols-[minmax(380px,480px)_1fr] lg:gap-24 print:block print:h-auto">
-          {/* ===== Left: match & gaps (its own scroll) + pinned finish bar ===== */}
-          <aside className="flex flex-col gap-6 print:hidden lg:h-full lg:pr-3">
-            <div className="cv-scroll min-h-0 flex-1 space-y-8 overflow-y-auto pr-0">
-              <AnalysisBlock
+      <main className="mx-auto max-w-[1600px] px-6 pb-24 pt-8 print:p-0 lg:flex lg:min-h-0 lg:flex-1 lg:pb-2 lg:pr-3 print:h-auto print:overflow-visible">
+        <div className="grid gap-10 lg:h-full lg:min-h-0 lg:w-full lg:grid-cols-[minmax(360px,460px)_1fr] lg:gap-24 print:block print:h-auto">
+          {/* ===== Left: pinned score card + scrolling gaps + pinned footer ===== */}
+          <aside className="flex flex-col gap-4 print:hidden lg:h-full lg:min-h-0 lg:pr-3">
+            <div className="shrink-0">
+              <ScoreCard
                 aiUsed={job.aiUsed ?? false}
+                matchedCount={matchedLive.length}
+                missingCount={missingLive.length}
+                score={score}
+              />
+            </div>
+
+            <div className="cv-scroll min-h-0 space-y-6 lg:flex-1 lg:overflow-y-auto lg:pr-1">
+              <AnalysisBlock
                 matchedLive={matchedLive}
                 missingLive={missingLive}
                 optionalMissing={optionalMissing}
-                score={score}
                 targets={targets}
                 categories={categories}
                 onQuickAdd={quickAdd}
@@ -455,23 +462,23 @@ export function Workspace({ jobId }: { jobId: string }) {
             </div>
 
             {/* Always-visible finish bar */}
-            <div className="shrink-0 border-t border-border pt-4">
+            <div className="shrink-0 border-t border-border bg-background pt-3">
               <Button onClick={printCv} className="w-full">
                 <Printer className="h-4 w-4" />
                 Print / Save as PDF
               </Button>
-              <p className="mt-2.5 text-xs leading-relaxed text-muted-foreground">
+              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
                 Click any line to edit it. Hover a section to reveal{" "}
                 <span className="font-medium text-foreground">+ add</span> a
-                bullet — or flash a section from a missing keyword, then use
-                its add option. When you&apos;re happy, print above.
+                bullet — or flash a section from a keyword, then use its add
+                option. When you&apos;re happy, print above.
               </p>
             </div>
           </aside>
 
           {/* ===== Right: the live CV — scrolls independently; padding keeps
               the sheet from ending at the pane's bottom edge ===== */}
-          <div className="min-w-0 pb-24 pr-6 print:h-auto print:overflow-visible print:pb-0 lg:h-full lg:overflow-y-auto">
+          <div className="cv-scroll min-w-0 pb-24 pr-6 print:h-auto print:overflow-visible print:pb-0 lg:h-full lg:overflow-y-auto">
             <div
               className={cn(
                 "mx-auto w-fit rounded-lg transition-all duration-500",
@@ -665,12 +672,72 @@ function FileChip({
 
 // ===== Score + keyword chips with the 3 actions =====
 
-function AnalysisBlock({
+// ===== Score card — pinned above the scrolling keyword lists =====
+
+function ScoreCard({
   aiUsed,
+  matchedCount,
+  missingCount,
+  score,
+}: {
+  aiUsed: boolean;
+  matchedCount: number;
+  missingCount: number;
+  score: number;
+}) {
+  return (
+    <div className="overflow-hidden rounded-xl border border-border">
+      <div
+        className={cn(
+          "flex items-start gap-2 border-b px-4 py-2.5",
+          aiUsed
+            ? "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-100"
+            : "border-red-200 bg-red-50 text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-100",
+        )}
+      >
+        {aiUsed ? (
+          <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+        ) : (
+          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
+        )}
+        <div className="min-w-0">
+          <p className="text-sm font-medium">
+            {aiUsed ? "AI tailored this CV" : "No AI — profile copied as-is"}
+          </p>
+          <p className="mt-0.5 text-xs leading-snug opacity-80">
+            {aiUsed
+              ? "Summary and bullets were rewritten for this job description."
+              : "The AI didn't run (no key, quota or error). This is your profile, unchanged."}
+          </p>
+        </div>
+      </div>
+      <div className="flex items-center gap-4 px-4 py-3">
+        <div className="shrink-0 text-center">
+          <p className="text-[32px] font-medium tabular-nums tracking-tight">
+            {score}%
+          </p>
+          <p className="mt-0.5 text-xs text-muted-foreground">match</p>
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="h-1 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-foreground transition-all duration-500"
+              style={{ width: `${score}%` }}
+            />
+          </div>
+          <p className="mt-1.5 text-[13px] text-muted-foreground">
+            {matchedCount} covered · {missingCount} missing keywords
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AnalysisBlock({
   matchedLive,
   missingLive,
   optionalMissing,
-  score,
   targets,
   categories,
   onQuickAdd,
@@ -679,77 +746,18 @@ function AnalysisBlock({
   autofitting,
   onAutoFit,
 }: AnalysisBlockProps) {
-  const [askAi, setAskAi] = useState(false);
-  const [prompt, setPrompt] = useState("");
-
-  // Collapse the prompt form once nothing is missing anymore
-  useEffect(() => {
-    if (missingLive.length === 0) {
-      setAskAi(false);
-      setPrompt("");
-    }
-  }, [missingLive.length]);
-
   return (
     <>
-      {/* Score card — the AI status banner says plainly who wrote this CV */}
-      <div className="overflow-hidden rounded-xl border border-border">
-        <div
-          className={cn(
-            "flex items-start gap-2.5 border-b px-5 py-3 text-sm",
-            aiUsed
-              ? "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-100"
-              : "border-red-200 bg-red-50 text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-100",
-          )}
-        >
-          {aiUsed ? (
-            <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-          ) : (
-            <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
-          )}
-          <div className="min-w-0">
-            <p className="font-medium">
-              {aiUsed ? "AI tailored this CV" : "No AI — profile copied as-is"}
-            </p>
-            <p className="mt-0.5 text-xs opacity-80">
-              {aiUsed
-                ? "Summary and bullets were rewritten for this job description."
-                : "The AI didn't run (no key, quota or error). This is your profile, unchanged."}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-6 p-6">
-        <div className="text-center">
-          <p className="text-4xl font-medium tabular-nums tracking-tight">
-            {score}%
-          </p>
-          <p className="mt-0.5 text-xs text-muted-foreground">match</p>
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-            <div
-              className="h-full rounded-full bg-foreground transition-all duration-500"
-              style={{ width: `${score}%` }}
-            />
-          </div>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {matchedLive.length} covered · {missingLive.length} missing
-            keywords
-          </p>
-        </div>
-        </div>
-      </div>
-
       {/* Matched */}
       <section>
-        <h2 className="text-base font-medium">You already have</h2>
+        <h2 className="text-[15px] font-medium">You already have</h2>
         {matchedLive.length === 0 ? (
-          <p className="mt-1.5 text-sm text-muted-foreground">
+          <p className="mt-1 text-[13px] text-muted-foreground">
             None of your keywords appear in this description — paste the full
             requirements section?
           </p>
         ) : (
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="mt-2.5 flex flex-wrap gap-1.5">
             {matchedLive.map((kw) => (
               <MatchedChip key={kw.term} kw={kw} onHighlight={onHighlight} />
             ))}
@@ -759,23 +767,24 @@ function AnalysisBlock({
 
       {/* Missing (required only — these drive the score) */}
       <section>
-        <h2 className="text-base font-medium">Missing from your data</h2>
+        <h2 className="text-[15px] font-medium">Missing from your data</h2>
         {missingLive.length === 0 ? (
-          <p className="mt-1.5 flex items-center gap-1.5 text-sm text-emerald-700 dark:text-emerald-400">
-            <Check className="h-3.5 w-3.5" />
+          <p className="mt-1 flex items-center gap-1.5 text-[13px] text-emerald-700 dark:text-emerald-400">
+            <Check className="h-3 w-3" />
             You cover every required keyword this job lists.
           </p>
         ) : (
           <>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="mt-1 text-[13px] text-muted-foreground">
               Type it in the CV and it turns green on its own — or use one of
               the actions below.
             </p>
-            <div className="mt-3 flex flex-wrap gap-2">
+            <div className="mt-2.5 flex flex-wrap gap-1.5">
               {missingLive.map((kw) => (
-                <MissingChip
+                <KeywordChip
                   key={kw.term}
                   kw={kw}
+                  tone="red"
                   targets={targets}
                   categories={categories}
                   onQuickAdd={(catId) => onQuickAdd(kw.term, catId)}
@@ -783,85 +792,111 @@ function AnalysisBlock({
                 />
               ))}
             </div>
-
-            {/* Ask AI — user-written prompt, one call for all keywords */}
-            <div className="mt-5 rounded-xl border border-dashed border-border p-3">
-              {!askAi ? (
-                <button
-                  type="button"
-                  onClick={() => setAskAi(true)}
-                  className="flex w-full items-center justify-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  <Sparkles className="h-3.5 w-3.5 text-blue-600" />
-                  Ask AI to fit {missingLive.length} keyword
-                  {missingLive.length > 1 ? "s" : ""} in
-                </button>
-              ) : (
-                <div className="space-y-2.5">
-                  <Textarea
-                    autoFocus
-                    rows={3}
-                    value={prompt}
-                    onChange={(e) => setPrompt(e.target.value)}
-                    placeholder="Say where each keyword is used and how — tied to your existing experience and projects. Example: Kubernetes fits my platform-engineer role, where I led the cluster migration and set up autoscaling."
-                  />
-                  <div className="flex items-center gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      className="flex-1"
-                      disabled={autofitting}
-                      onClick={() => {
-                        setAskAi(false);
-                        setPrompt("");
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="flex-1"
-                      disabled={autofitting || prompt.trim().length === 0}
-                      onClick={() => onAutoFit(prompt.trim())}
-                    >
-                      {autofitting ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Sparkles className="h-4 w-4 text-blue-600" />
-                      )}
-                      {autofitting ? "Fitting…" : "Generate"}
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </div>
           </>
         )}
       </section>
 
-      {/* Optional (nice-to-have) — orange, never counted in the score */}
+      {/* Optional (nice-to-have) — same actions as missing, orange, no score */}
       {optionalMissing.length > 0 ? (
         <section>
-          <h2 className="text-base font-medium">Nice to have</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <h2 className="text-[15px] font-medium">Nice to have</h2>
+          <p className="mt-1 text-[13px] text-muted-foreground">
             Listed as optional in the job post — they don&apos;t affect your
             score.
           </p>
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="mt-2.5 flex flex-wrap gap-1.5">
             {optionalMissing.map((kw) => (
-              <span
+              <KeywordChip
                 key={kw.term}
-                className="inline-flex items-center rounded-full border border-orange-200 bg-orange-50 py-1 pl-2.5 pr-3 text-sm text-orange-800 dark:border-orange-900 dark:bg-orange-950 dark:text-orange-300"
-              >
-                {kw.term}
-              </span>
+                kw={kw}
+                tone="orange"
+                targets={targets}
+                categories={categories}
+                onQuickAdd={(catId) => onQuickAdd(kw.term, catId)}
+                onNavigate={(targetId) => onNavigate(targetId)}
+              />
             ))}
           </div>
         </section>
       ) : null}
+
+      {/* ONE Ask AI box for every gap — required + optional. */}
+      {missingLive.length + optionalMissing.length > 0 ? (
+        <AskAiBox
+          count={missingLive.length + optionalMissing.length}
+          autofitting={autofitting}
+          onAutoFit={onAutoFit}
+        />
+      ) : null}
     </>
+  );
+}
+
+/** Shared "Ask AI" form — same UI under required and optional keywords. */
+function AskAiBox({
+  count,
+  autofitting,
+  onAutoFit,
+}: {
+  count: number;
+  autofitting: boolean;
+  onAutoFit: (prompt: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [prompt, setPrompt] = useState("");
+
+  return (
+    <div className="mt-3 rounded-xl border border-dashed border-border p-2.5">
+      {!open ? (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="flex w-full items-center justify-center gap-1.5 text-[13px] text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <Sparkles className="h-3.5 w-3.5 text-blue-600" />
+          Ask AI to fit {count} keyword{count > 1 ? "s" : ""} in
+        </button>
+      ) : (
+        <div className="space-y-2">
+          <Textarea
+            autoFocus
+            rows={3}
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder="Say where each keyword is used and how — tied to your existing experience and projects. Example: Kubernetes fits my platform-engineer role, where I led the cluster migration and set up autoscaling."
+          />
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="flex-1"
+              disabled={autofitting}
+              onClick={() => {
+                setOpen(false);
+                setPrompt("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="flex-1"
+              disabled={autofitting || prompt.trim().length === 0}
+              onClick={() => onAutoFit(prompt.trim())}
+            >
+              {autofitting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4 text-blue-600" />
+              )}
+              {autofitting ? "Fitting…" : "Generate"}
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -879,7 +914,7 @@ function MatchedChip({
       type="button"
       onClick={() => onHighlight(kw)}
       title="Show on the CV"
-      className="cursor-pointer inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 py-1 pl-2.5 pr-3 text-sm text-emerald-800 transition-colors hover:bg-emerald-100 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300 dark:hover:bg-emerald-900"
+      className="cursor-pointer inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 py-1 pl-2.5 pr-3 text-[13px] text-emerald-800 transition-colors hover:bg-emerald-100 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300 dark:hover:bg-emerald-900"
     >
       <Check className="h-3 w-3" />
       {kw.term}
@@ -887,16 +922,18 @@ function MatchedChip({
   );
 }
 
-// ===== Missing keyword chip: quick add to skills / navigate to edit =====
+// ===== Keyword chip (required = red, optional = orange): quick add / navigate =====
 
-function MissingChip({
+function KeywordChip({
   kw,
+  tone,
   targets,
   categories,
   onQuickAdd,
   onNavigate,
 }: {
   kw: Keyword;
+  tone: "red" | "orange";
   targets: { id: string; label: string }[];
   categories: { id: string; label: string }[];
   onQuickAdd: (categoryId: string) => void;
@@ -910,12 +947,17 @@ function MissingChip({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 py-1 pl-2.5 pr-3 text-sm text-red-800 transition-colors hover:bg-red-100 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-full border py-1 pl-2.5 pr-3 text-[13px] transition-colors",
+            tone === "orange"
+              ? "border-orange-200 bg-orange-50 text-orange-800 hover:bg-orange-100 dark:border-orange-900 dark:bg-orange-950 dark:text-orange-300 dark:hover:bg-orange-900"
+              : "border-red-200 bg-red-50 text-red-800 hover:bg-red-100 dark:border-red-900 dark:bg-red-950 dark:text-red-300 dark:hover:bg-red-900",
+          )}
         >
           {kw.term}
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-96 space-y-4">
+      <PopoverContent align="start" className="w-80 space-y-4">
         <p className="text-sm font-medium">{kw.term}</p>
 
         {/* 1 — Quick add to skills (client-side, 0 tokens) */}
@@ -931,7 +973,7 @@ function MissingChip({
                 onClick={() => {
                   onQuickAdd(c.id);
                   toast("Added to skills", {
-                    description: `${kw.term} → ${c.label}. It turns green in the CV instantly.`,
+                    description: `${kw.term} → ${c.label}. It's added to your CV instantly.`,
                   });
                   close();
                 }}
