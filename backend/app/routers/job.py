@@ -240,7 +240,7 @@ def generate_job(body: CreateJobRequest, profile_data: dict) -> dict:
         '      "category": "<JD-relevant group name>",\n'
         '      "skills": ["<existing skill from profile>"]\n'
         "    }\n"
-        "  ]\n"
+        "  ]\n" 
         "}\n\n"
         "## Hard rules\n"
         "1. Return ONLY title, company, keywords, application_notes, "

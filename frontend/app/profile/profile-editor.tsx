@@ -16,6 +16,14 @@ import { errMsg } from "@/lib/api";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { BackLink, TopBar } from "@/components/top-bar";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   CertificationsSection,
   ContactSection,
   EducationSection,
@@ -40,6 +48,7 @@ export type Update = (fn: (p: MasterProfile) => MasterProfile) => void;
 export function ProfileEditor() {
   const [profile, setProfile] = useState<MasterProfile>(emptyProfile);
   const [active, setActive] = useState<string>("contact");
+  const [confirmReset, setConfirmReset] = useState(false);
   const loaded = useRef(false);
   const firstSave = useRef(true);
 
@@ -115,9 +124,12 @@ export function ProfileEditor() {
     try {
       const fresh = await clearProfile();
       setProfile(fresh);
-      toast("Reset", { description: "Profile cleared." });
+      setConfirmReset(false);
+      toast.success("Profile deleted", {
+        description: "All profile data was removed. Saved CVs are untouched.",
+      });
     } catch (e) {
-      toast.error("Reset failed", { description: errMsg(e) });
+      toast.error("Delete failed", { description: errMsg(e) });
     }
   }
 
@@ -133,8 +145,13 @@ export function ProfileEditor() {
         }
         right={
           <>
-            <Button variant="ghost" size="sm" className="text-xs" onClick={reset}>
-              Reset data
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs text-muted-foreground hover:text-destructive"
+              onClick={() => setConfirmReset(true)}
+            >
+              Delete profile
             </Button>
             <ThemeToggle />
           </>
@@ -225,6 +242,28 @@ export function ProfileEditor() {
           </footer>
         </main>
       </div>
+
+      {/* Delete confirmation */}
+      <Dialog open={confirmReset} onOpenChange={setConfirmReset}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete your whole profile?</DialogTitle>
+            <DialogDescription>
+              This permanently erases your contact details, summary, skills,
+              experience, projects, education and certifications. Your saved
+              CVs are not deleted. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmReset(false)}>
+              Keep my profile
+            </Button>
+            <Button variant="destructive" onClick={reset}>
+              Delete profile
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
