@@ -4,7 +4,15 @@
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-export class ApiError extends Error {}
+export class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
 
 /** JSON request against the backend. Non-2xx throws ApiError with the
  *  FastAPI `detail` message when present (422/404 etc). */
@@ -31,6 +39,7 @@ export async function api<T>(
       }
       throw new ApiError(
         typeof detail === "string" ? detail : JSON.stringify(detail),
+        res.status,
       );
     }
     if (res.status === 204) return undefined as T;
@@ -40,11 +49,20 @@ export async function api<T>(
   }
 }
 
+/** AbortController timeouts throw a DOMException, not an Error — check the
+ *  name instead of `instanceof Error` so the message is accurate. */
+export function isAbortError(e: unknown): boolean {
+  return (
+    typeof e === "object" &&
+    e !== null &&
+    (e as { name?: unknown }).name === "AbortError"
+  );
+}
+
 /** Short human message for any thrown value (toasts). */
 export function errMsg(e: unknown): string {
   if (e instanceof ApiError) return e.message;
-  if (e instanceof Error && e.name === "AbortError")
-    return "The backend took too long to answer.";
+  if (isAbortError(e)) return "The backend took too long to answer.";
   if (e instanceof Error) return e.message;
   return "Something went wrong.";
 }
