@@ -820,10 +820,11 @@ function AnalysisBlock({
         </section>
       ) : null}
 
-      {/* ONE Ask AI box for every gap — required + optional. */}
+      {/* ONE Ask AI box covering both groups, with both counts shown. */}
       {missingLive.length + optionalMissing.length > 0 ? (
         <AskAiBox
-          count={missingLive.length + optionalMissing.length}
+          missingCount={missingLive.length}
+          optionalCount={optionalMissing.length}
           autofitting={autofitting}
           onAutoFit={onAutoFit}
         />
@@ -832,38 +833,57 @@ function AnalysisBlock({
   );
 }
 
-/** Shared "Ask AI" form — same UI under required and optional keywords. */
+/** One box for both keyword groups: missing (red) + nice to have (orange).
+ *  The counts make it obvious the single AI action covers them all. */
 function AskAiBox({
-  count,
+  missingCount,
+  optionalCount,
   autofitting,
   onAutoFit,
 }: {
-  count: number;
+  missingCount: number;
+  optionalCount: number;
   autofitting: boolean;
   onAutoFit: (prompt: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [prompt, setPrompt] = useState("");
+  const total = missingCount + optionalCount;
 
   return (
-    <div className="mt-3 rounded-xl border border-dashed border-border p-2.5">
+    <div className="mt-4 rounded-xl border border-border bg-muted/30 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[13px] font-medium">Fit the remaining keywords</p>
+        <div className="flex items-center gap-1.5">
+          {missingCount > 0 ? (
+            <span className="rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
+              {missingCount} missing
+            </span>
+          ) : null}
+          {optionalCount > 0 ? (
+            <span className="rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[11px] font-medium text-orange-700 dark:border-orange-900 dark:bg-orange-950 dark:text-orange-300">
+              {optionalCount} nice to have
+            </span>
+          ) : null}
+        </div>
+      </div>
       {!open ? (
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="flex w-full items-center justify-center gap-1.5 text-[13px] text-muted-foreground transition-colors hover:text-foreground"
+          className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border bg-background px-3 py-2 text-[13px] text-foreground transition-colors hover:bg-muted"
         >
           <Sparkles className="h-3.5 w-3.5 text-blue-600" />
-          Ask AI to fit {count} keyword{count > 1 ? "s" : ""} in
+          Ask AI to fit all {total} in
         </button>
       ) : (
-        <div className="space-y-2">
+        <div className="mt-2.5 space-y-2">
           <Textarea
             autoFocus
             rows={3}
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Say where each keyword is used and how — tied to your existing experience and projects. Example: Kubernetes fits my platform-engineer role, where I led the cluster migration and set up autoscaling."
+            placeholder="Say where each keyword fits — missing or nice to have — tied to your existing experience and projects. Example: Kubernetes fits my platform-engineer role, where I led the cluster migration and set up autoscaling."
           />
           <div className="flex items-center gap-2">
             <Button
