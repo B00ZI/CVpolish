@@ -639,9 +639,13 @@ Requirements:
    3. **Validate everything**: Pydantic model, keyword cleaning, id-list
       and skill-multiset guards. ANY failure (bad JSON, no keywords, no
       reusable experience/projects, skill dropped/invented) → raise
-  4. **On ANY exception → `503`** `{ "detail": "AI couldn't generate a CV —
-     nothing was created. Try again in a moment." }` — no row is written,
-     transaction rolled back. There is NO freeze/fake fallback.
+   4. **On ANY exception → `503`**, and the `detail` names the real cause:
+      provider failures (`AIError` from `core/ai.py`) →
+      `"AI could not generate a CV — AI is busy right now (provider 503
+      high demand); nothing was created."`; unusable replies →
+      `"The AI reply couldn't be used — <reason>; nothing was created."`
+      — no row is written, transaction rolled back. There is NO
+      freeze/fake fallback.
   5. Success: `createdAt = now`, `language = "en"`, `cvFr = null`,
      `fileName` unset, `analysis` column = the cleaned keyword list, insert
      with `ai_used = true` → `201`
@@ -700,10 +704,11 @@ Requirements:
   `lastExtractedAt`) → save `cv_fr` (full JSONB reassign), set
   `language = "fr"` → `200 {aiUsed: true, cvFr, language}`.
 - **Model failure (no key / quota / timeout / bad output / guard trip):**
-  rollback → `503` `{ "detail": "The French version couldn't be generated —
-  AI is unavailable. Try again in a moment." }` — `cv_fr` stays as it was
-  (usually null), `language` unchanged. Client toasts the detail. Never a
-  fake translation, never a raw `500`.
+  rollback → `503` whose `detail` names the cause, e.g. `"AI couldn't
+  translate the CV — AI request timed out (20s limit); French version not
+  created."` — `cv_fr` stays as it was (usually null), `language`
+  unchanged. Client toasts the detail. Never a fake translation, never a
+  raw `500`.
 
 #### `POST /api/jobs/{id}/integrate-missing`  ⚡ AI
 - "Ask AI" under the missing-keyword chips — the workspace's other explicit
@@ -737,11 +742,11 @@ Requirements:
   (one unchanged), client adopts. **No keywords in the body**: requirements
   don't change, so the client's live scan re-checks the new CV text against
   the stored `job.keywords` (chips flip on their own).
-- **Model failure (or any guard trips):** rollback → `503`
-  `{ "detail": "AI couldn't complete the edit — nothing was changed. Try
-  again in a moment." }` — the saved document is untouched, client toasts
-  the detail and keeps local state. Never a silent no-op `200`, never a
-  raw `500`.
+- **Model failure (or any guard trips):** rollback → `503` whose `detail`
+  names the cause, e.g. `"AI couldn't complete the edit — AI is busy right
+  now (provider 503 high demand); nothing was changed."` — the saved
+  document is untouched, client toasts the detail and keeps local state.
+  Never a silent no-op `200`, never a raw `500`.
 
 #### Frontend-only features — build NO endpoints for these
 | Feature | Why it needs no backend |
@@ -803,8 +808,8 @@ lost `{lang}`, profiles table got `id='master'` PK, jobs gained `cv_fr`,
 `PATCH`/`PUT cv` got `language`, `JobCard` got `hasFr`).
 
 **Step 3 — AI wiring.** ✅ done 2026-11-17, then revised 2026-11-22:
-1. `app/core/ai.py` — `call(prompt) -> str | None`, 20 s cap, `None` on
-   any failure ✅
+1. `app/core/ai.py` — `call(prompt) -> str`, 20 s cap, raises `AIError`
+   with a short provider reason (timeout / quota / busy / key) ✅
 2. ~~#4 extract-intelligence~~ — **deleted 2026-11-22** with `aiIntelligence`
 3. #6 `generate_job()` — ✅ AI-required: generates CV **and** `keywords`,
    validates, failure → 503, no row
@@ -823,9 +828,14 @@ card counts at read; AI failures → 503.
 
 **AI-required endpoints (#6, #11, #12):** model unavailable, quota hit,
 timeout, bad/garbled output, or a structure guard trip → **`503` with a
-readable `detail`**, transaction rolled back, nothing saved. The client
-toasts the detail. Never a fake CV, never a silent no-op `200`, never a
-raw `500` (catch `Exception` → `raise HTTPException(503, ...)`).
+readable `detail` that names the cause**, transaction rolled back, nothing
+saved. `core/ai.py` never returns `None`: it raises `AIError` with a short
+reason (`AI is busy right now (provider 503 high demand)`, `AI request
+timed out (20s limit)`, `AI free-tier quota reached`, `GEMINI_API_KEY is not
+set`, …). The router turns that into the endpoint's message plus "nothing
+was created / changed"; unusable AI replies get their validation reason.
+The client toasts the detail. Never a fake CV, never a silent no-op `200`,
+never a raw `500` (catch `Exception` → `raise HTTPException(503, ...)`).
 
 **The one `200 aiUsed:false` case:** translate's cache rule — `cv_fr`
 exists and no `force` → the saved copy is returned with zero model calls.
