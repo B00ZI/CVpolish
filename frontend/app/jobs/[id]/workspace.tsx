@@ -434,19 +434,20 @@ export function Workspace({ jobId }: { jobId: string }) {
       {/* Single view: two independent panes on desktop — the left panel
           is fully pinned (it never moves, no matter how far you scroll) */}
       <main className="mx-auto max-w-[1600px] px-6 pb-24 pt-8 print:p-0 lg:flex lg:min-h-0 lg:flex-1 lg:pb-2 lg:pr-3 print:h-auto print:overflow-visible">
-        <div className="grid gap-10 lg:h-full lg:min-h-0 lg:w-full lg:grid-cols-[minmax(360px,460px)_1fr] lg:gap-24 print:block print:h-auto">
+        <div className="grid gap-6 lg:h-full lg:min-h-0 lg:w-full lg:grid-cols-[minmax(420px,520px)_1fr] lg:gap-10 print:block print:h-auto">
           {/* ===== Left: pinned score card + scrolling gaps + pinned footer ===== */}
-          <aside className="flex flex-col gap-4 print:hidden lg:h-full lg:min-h-0 lg:pr-3">
+          <aside className="flex flex-col gap-3 print:hidden lg:h-full lg:min-h-0 lg:pr-2">
             <div className="shrink-0">
               <ScoreCard
                 aiUsed={job.aiUsed ?? false}
                 matchedCount={matchedLive.length}
                 missingCount={missingLive.length}
+                optionalCount={optionalMissing.length}
                 score={score}
               />
             </div>
 
-            <div className="cv-scroll min-h-0 space-y-6 lg:flex-1 lg:overflow-y-auto lg:pr-1">
+            <div className="cv-scroll min-h-0 space-y-4 lg:flex-1 lg:overflow-y-auto lg:pr-1">
               <AnalysisBlock
                 matchedLive={matchedLive}
                 missingLive={missingLive}
@@ -478,7 +479,7 @@ export function Workspace({ jobId }: { jobId: string }) {
 
           {/* ===== Right: the live CV — scrolls independently; padding keeps
               the sheet from ending at the pane's bottom edge ===== */}
-          <div className="cv-scroll min-w-0 pb-24 pr-6 print:h-auto print:overflow-visible print:pb-0 lg:h-full lg:overflow-y-auto">
+          <div className="cv-scroll min-w-0 pb-24 pr-4 print:h-auto print:overflow-visible print:pb-0 lg:h-full lg:overflow-y-auto">
             <div
               className={cn(
                 "mx-auto w-fit rounded-lg transition-all duration-500",
@@ -678,57 +679,65 @@ function ScoreCard({
   aiUsed,
   matchedCount,
   missingCount,
+  optionalCount,
   score,
 }: {
   aiUsed: boolean;
   matchedCount: number;
   missingCount: number;
+  optionalCount: number;
   score: number;
 }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-border">
-      <div
-        className={cn(
-          "flex items-start gap-2 border-b px-4 py-2.5",
-          aiUsed
-            ? "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-100"
-            : "border-red-200 bg-red-50 text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-100",
-        )}
-      >
-        {aiUsed ? (
-          <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-        ) : (
-          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
-        )}
-        <div className="min-w-0">
-          <p className="text-sm font-medium">
-            {aiUsed ? "AI tailored this CV" : "No AI — profile copied as-is"}
+    <div className="rounded-xl border border-border bg-card px-5 py-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            Match score
           </p>
-          <p className="mt-0.5 text-xs leading-snug opacity-80">
-            {aiUsed
-              ? "Summary and bullets were rewritten for this job description."
-              : "The AI didn't run (no key, quota or error). This is your profile, unchanged."}
-          </p>
-        </div>
-      </div>
-      <div className="flex items-center gap-4 px-4 py-3">
-        <div className="shrink-0 text-center">
-          <p className="text-[32px] font-medium tabular-nums tracking-tight">
+          <p className="mt-1 text-[34px] font-medium leading-none tabular-nums tracking-tight">
             {score}%
           </p>
-          <p className="mt-0.5 text-xs text-muted-foreground">match</p>
         </div>
-        <div className="min-w-0 flex-1">
-          <div className="h-1 overflow-hidden rounded-full bg-muted">
-            <div
-              className="h-full rounded-full bg-foreground transition-all duration-500"
-              style={{ width: `${score}%` }}
-            />
-          </div>
-          <p className="mt-1.5 text-[13px] text-muted-foreground">
-            {matchedCount} covered · {missingCount} missing keywords
-          </p>
-        </div>
+        <span
+          className={cn(
+            "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium",
+            aiUsed
+              ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300"
+              : "border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300",
+          )}
+        >
+          {aiUsed ? (
+            <Sparkles className="h-3.5 w-3.5" />
+          ) : (
+            <TriangleAlert className="h-3.5 w-3.5" />
+          )}
+          {aiUsed ? "AI tailored" : "No AI"}
+        </span>
+      </div>
+      <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+        <div
+          className={cn(
+            "h-full rounded-full transition-all duration-500",
+            score >= 80
+              ? "bg-gradient-to-r from-emerald-500 to-teal-400"
+              : score >= 50
+                ? "bg-gradient-to-r from-amber-500 to-yellow-400"
+                : "bg-gradient-to-r from-red-500 to-orange-400",
+          )}
+          style={{ width: `${score}%` }}
+        />
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300">
+          {matchedCount} covered
+        </span>
+        <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-medium text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
+          {missingCount} missing
+        </span>
+        <span className="rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-[11px] font-medium text-orange-700 dark:border-orange-900 dark:bg-orange-950 dark:text-orange-300">
+          {optionalCount} optional
+        </span>
       </div>
     </div>
   );
@@ -748,7 +757,7 @@ function AnalysisBlock({
 }: AnalysisBlockProps) {
   return (
     <div className="rounded-xl border border-border bg-card">
-      <div className="border-b border-border px-4 py-2.5">
+      <div className="border-b border-border px-5 py-3">
         <p className="text-sm font-medium">Keyword scan</p>
         <p className="mt-0.5 text-[11px] text-muted-foreground">
           Updates live as you edit the CV.
@@ -756,7 +765,7 @@ function AnalysisBlock({
       </div>
       <div className="divide-y divide-border">
         {/* Matched */}
-        <section className="px-4 py-3">
+        <section className="px-5 py-3.5">
         <h2 className="text-[15px] font-medium">You already have</h2>
         {matchedLive.length === 0 ? (
           <p className="mt-1 text-[13px] text-muted-foreground">
@@ -773,7 +782,7 @@ function AnalysisBlock({
       </section>
 
       {/* Missing (required only — these drive the score) */}
-      <section className="px-4 py-3">
+      <section className="px-5 py-3.5">
         <h2 className="text-[15px] font-medium">Missing from your data</h2>
         {missingLive.length === 0 ? (
           <p className="mt-1 flex items-center gap-1.5 text-[13px] text-emerald-700 dark:text-emerald-400">
@@ -805,7 +814,7 @@ function AnalysisBlock({
 
       {/* Optional (nice-to-have) — same actions as missing, orange, no score */}
       {optionalMissing.length > 0 ? (
-        <section className="px-4 py-3">
+        <section className="px-5 py-3.5">
           <h2 className="text-[15px] font-medium">Nice to have</h2>
           <p className="mt-1 text-[13px] text-muted-foreground">
             Listed as optional in the job post — they don&apos;t affect your
@@ -892,7 +901,7 @@ function AskAiBox({
             rows={3}
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Say where each keyword fits — missing or nice to have — tied to your existing experience and projects. Example: Kubernetes fits my platform-engineer role, where I led the cluster migration and set up autoscaling."
+            placeholder={"Describe where each missing or nice-to-have skill belongs — put it in a project or experience with how you used it, or tell the AI to add it to a skills group. Example: 'Add FastAPI to the Client Scope project, where I built the AI parsing layer' or 'Add Redis under Databases skills'."}
           />
           <div className="flex items-center gap-2">
             <Button
