@@ -17,7 +17,7 @@ import re
 from collections import Counter
 from datetime import datetime, timezone
 from uuid import uuid4
-from app.core.ai import call
+from app.core.ai import AIError, call
 import json 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -414,11 +414,17 @@ def create_job(body: CreateJobRequest, db: Session = Depends(get_db)):
     # AI is required: any model/validation failure -> honest 503, NO row.
     try:
         generated = generate_job(body, frozen)
+    except AIError as e:
+        print(e)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"AI could not generate a CV — {e}; nothing was created.",
+        )
     except Exception as e:
         print(e)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="AI couldn't generate a CV — nothing was created. Try again in a moment.",
+            detail=f"The AI reply couldn't be used — {e}; nothing was created.",
         )
 
     job = JobModel(
@@ -599,12 +605,19 @@ def translate_job(id: str, body: TranslateRequest, db: Session = Depends(get_db)
         return TranslateResponse(
             aiUsed=True, cvFr=MasterProfileResponse(**data), language="fr"
         )
+    except AIError as e:
+        print(e)
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"AI couldn't translate the CV — {e}; French version not created.",
+        )
     except Exception as e:
         print(e)
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="The French version couldn't be generated — AI is unavailable. Try again in a moment.",
+            detail=f"The translation reply couldn't be used — {e}; French version not created.",
         )
 
 
@@ -691,12 +704,19 @@ def integrate_missing(id: str, body: IntegrateMissingRequest, db: Session = Depe
 
          
 
+    except AIError as e:
+         print(e)
+         db.rollback()
+         raise HTTPException(
+             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+             detail=f"AI couldn't complete the edit — {e}; nothing was changed.",
+         )
     except Exception as e :
          print(e)
          db.rollback()
          raise HTTPException(
              status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-             detail="AI couldn't complete the edit — nothing was changed. Try again in a moment.",
+             detail=f"The edit reply couldn't be used — {e}; nothing was changed.",
          )
 
 
