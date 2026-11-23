@@ -747,9 +747,16 @@ function AnalysisBlock({
   onAutoFit,
 }: AnalysisBlockProps) {
   return (
-    <>
-      {/* Matched */}
-      <section>
+    <div className="rounded-xl border border-border bg-card">
+      <div className="border-b border-border px-4 py-2.5">
+        <p className="text-sm font-medium">Keyword scan</p>
+        <p className="mt-0.5 text-[11px] text-muted-foreground">
+          Updates live as you edit the CV.
+        </p>
+      </div>
+      <div className="divide-y divide-border">
+        {/* Matched */}
+        <section className="px-4 py-3">
         <h2 className="text-[15px] font-medium">You already have</h2>
         {matchedLive.length === 0 ? (
           <p className="mt-1 text-[13px] text-muted-foreground">
@@ -766,7 +773,7 @@ function AnalysisBlock({
       </section>
 
       {/* Missing (required only — these drive the score) */}
-      <section>
+      <section className="px-4 py-3">
         <h2 className="text-[15px] font-medium">Missing from your data</h2>
         {missingLive.length === 0 ? (
           <p className="mt-1 flex items-center gap-1.5 text-[13px] text-emerald-700 dark:text-emerald-400">
@@ -798,7 +805,7 @@ function AnalysisBlock({
 
       {/* Optional (nice-to-have) — same actions as missing, orange, no score */}
       {optionalMissing.length > 0 ? (
-        <section>
+        <section className="px-4 py-3">
           <h2 className="text-[15px] font-medium">Nice to have</h2>
           <p className="mt-1 text-[13px] text-muted-foreground">
             Listed as optional in the job post — they don&apos;t affect your
@@ -819,8 +826,9 @@ function AnalysisBlock({
           </div>
         </section>
       ) : null}
+      </div>
 
-      {/* ONE Ask AI box covering both groups, with both counts shown. */}
+      {/* ONE Ask AI action for both groups, in the same card. */}
       {missingLive.length + optionalMissing.length > 0 ? (
         <AskAiBox
           missingCount={missingLive.length}
@@ -829,7 +837,7 @@ function AnalysisBlock({
           onAutoFit={onAutoFit}
         />
       ) : null}
-    </>
+    </div>
   );
 }
 
@@ -848,36 +856,37 @@ function AskAiBox({
 }) {
   const [open, setOpen] = useState(false);
   const [prompt, setPrompt] = useState("");
-  const total = missingCount + optionalCount;
 
   return (
-    <div className="mt-4 rounded-xl border border-border bg-muted/30 p-3">
+    <div className="border-t border-border bg-muted/25 px-4 py-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[13px] font-medium">Fit the remaining keywords</p>
-        <div className="flex items-center gap-1.5">
-          {missingCount > 0 ? (
-            <span className="rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
+        <div>
+          <p className="text-[13px] font-medium">Add keywords with AI</p>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">
+            <span className="font-medium text-red-600 dark:text-red-400">
               {missingCount} missing
             </span>
-          ) : null}
-          {optionalCount > 0 ? (
-            <span className="rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[11px] font-medium text-orange-700 dark:border-orange-900 dark:bg-orange-950 dark:text-orange-300">
+            {" · "}
+            <span className="font-medium text-orange-600 dark:text-orange-400">
               {optionalCount} nice to have
             </span>
-          ) : null}
+            {" — one quick prompt"}
+          </p>
         </div>
+        {!open ? (
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => setOpen(true)}
+            className="shrink-0"
+          >
+            <Sparkles className="h-3.5 w-3.5 text-blue-600" />
+            Add with AI
+          </Button>
+        ) : null}
       </div>
-      {!open ? (
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border bg-background px-3 py-2 text-[13px] text-foreground transition-colors hover:bg-muted"
-        >
-          <Sparkles className="h-3.5 w-3.5 text-blue-600" />
-          Ask AI to fit all {total} in
-        </button>
-      ) : (
-        <div className="mt-2.5 space-y-2">
+      {open ? (
+        <div className="mt-3 space-y-2">
           <Textarea
             autoFocus
             rows={3}
@@ -915,7 +924,7 @@ function AskAiBox({
             </Button>
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
