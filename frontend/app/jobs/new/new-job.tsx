@@ -7,8 +7,54 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { createJob } from "@/lib/jobs-store";
-import { errMsg } from "@/lib/api";
+import { ApiError, errMsg, isAbortError } from "@/lib/api";
 import { TopBar, BackLink } from "@/components/top-bar";
+
+/** Turn a failed generation into a specific, honest toast. The backend's
+ *  503 detail says whether it was the AI; the status/timeout covers the
+ *  cases where no useful detail exists. */
+function generationError(e: unknown): { title: string; description: string } {
+  if (isAbortError(e)) {
+    return {
+      title: "Generation timed out",
+      description:
+        "The AI didn't answer within 30 seconds. Nothing was created — try again.",
+    };
+  }
+  if (e instanceof ApiError) {
+    if (e.status === 503) {
+      const detail = e.message;
+      const title = /timed out|timeout|deadline/i.test(detail)
+        ? "Generation timed out"
+        : /quota|rate limit/i.test(detail)
+          ? "AI quota reached"
+          : "AI is busy right now";
+      return { title, description: detail };
+    }
+    if (e.status === 404) {
+      return {
+        title: "Add your profile first",
+        description:
+          "Every CV is generated from your profile, so it can't be empty.",
+      };
+    }
+    if (e.status === 422) {
+      return {
+        title: "Check the job description",
+        description: e.message,
+      };
+    }
+    return { title: "Couldn't create the CV", description: e.message };
+  }
+  if (e instanceof TypeError) {
+    return {
+      title: "Can't reach the backend",
+      description:
+        "The API isn't responding. Check that the server is running, then try again.",
+    };
+  }
+  return { title: "Couldn't create the CV", description: errMsg(e) };
+}
 
 export function NewJob() {
   const router = useRouter();
@@ -29,7 +75,8 @@ export function NewJob() {
       });
       router.push(`/jobs/${job.id}`);
     } catch (e) {
-      toast.error("Couldn't create the CV", { description: errMsg(e) });
+      const { title, description } = generationError(e);
+      toast.error(title, { description });
       setBusy(false);
     }
   }
