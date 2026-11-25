@@ -826,16 +826,30 @@ card counts at read; AI failures → 503.
 
 ## Appendix — Error policy (replaces the old fallback inventory)
 
-**AI-required endpoints (#6, #11, #12):** model unavailable, quota hit,
-timeout, bad/garbled output, or a structure guard trip → **`503` with a
-readable `detail` that names the cause**, transaction rolled back, nothing
-saved. `core/ai.py` never returns `None`: it raises `AIError` with a short
-reason (`AI is busy right now (provider 503 high demand)`, `AI request
-timed out (20s limit)`, `AI free-tier quota reached`, `GEMINI_API_KEY is not
-set`, …). The router turns that into the endpoint's message plus "nothing
-was created / changed"; unusable AI replies get their validation reason.
-The client toasts the detail. Never a fake CV, never a silent no-op `200`,
-never a raw `500` (catch `Exception` → `raise HTTPException(503, ...)`).
+**AI-required endpoints (#6, #11, #12):** a **provider fallback loop** runs
+first — 6 free candidates in order (Gemini flash-lite → Gemini flash → Groq
+gpt-oss-120b → Groq gpt-oss-20b → Groq qwen → Gemini flash-2), 10 s each,
+60 s total. Most failures return early, so later candidates still get a
+shot; only a fully slow run reaches the deadline. A candidate is
+skipped on empty key, timeout, 429, 5xx, empty/non-JSON reply; the first
+valid JSON reply wins (native JSON mode is requested from both providers).
+SDK-internal retries are disabled (`attempts=1` for Gemini,
+`max_retries=0` for OpenAI-compatible calls) so a busy model fails fast and
+the loop advances. Only when **all** candidates fail → **`503` with a
+`detail` naming each provider's reason** (`AI is busy right now`, `AI request
+timed out`, `AI free-tier quota reached`, `no API keys configured`), nothing
+saved, transaction rolled back. `core/ai.py` never returns `None`: it raises
+`AIError`. A structurally bad but syntactically valid reply still fails in
+the router's guards → 503 (the loop does not re-roll it). The client toasts
+the detail. Never a fake CV, never a silent no-op `200`, never a raw `500`.
+
+**Live AI progress:** create/translate/integrate accept an optional
+`X-AI-Request-Id` header. `GET /api/jobs/ai-progress/{request_id}` returns
+`{"events": [{"provider": "...", "status": "trying|failed|ok", "reason": "..."}]}`
+from an in-memory store (last 50 ids, cleared on server restart). The
+frontend sends a UUID, polls every 600 ms while the call is in flight, and
+shows "Trying Gemini flash-lite / Groq 120B failed — AI is busy right now"
+so the user sees which free model is running and why ones failed.
 
 **The one `200 aiUsed:false` case:** translate's cache rule — `cv_fr`
 exists and no `force` → the saved copy is returned with zero model calls.
