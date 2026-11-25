@@ -17,9 +17,9 @@ import re
 from collections import Counter
 from datetime import datetime, timezone
 from uuid import uuid4
-from app.core.ai import AIError, call
+from app.core.ai import AIError, call, get_progress
 import json 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -42,6 +42,11 @@ from app.schemas.job import (
 from app.schemas.profile import Experience, Project, SkillGroup
 
 router = APIRouter()
+
+
+@router.get("/ai-progress/{request_id}")
+def ai_progress(request_id: str):
+    return {"events": get_progress(request_id)}
 
 
 # ---------- Keyword scan contract (backend/API.md 4b) ----------
@@ -192,7 +197,7 @@ def _parse_json(text):
 # ---------- the generation seam ----------
 
 
-def generate_job(body: CreateJobRequest, profile_data: dict) -> dict:
+def generate_job(body: CreateJobRequest, profile_data: dict, request_id=None) -> dict:
     """The ONE place the job's CV is born. AI is required: the model reads
     profile + JD and returns {title, company, summary, keywords, experience,
     projects}; code merges the verbatim parts, drops any entry whose id
@@ -284,7 +289,7 @@ def generate_job(body: CreateJobRequest, profile_data: dict) -> dict:
         "every skill from the profile without dropping or inventing "
         "skills.\n"
     )
-    text = call(prompt)
+    text = call(prompt, request_id)
     raw = _parse_json(text)       # None / bad JSON / stray fences -> raises
     if not isinstance(raw, dict):
         raise ValueError("reply is not a JSON object")
@@ -394,7 +399,11 @@ def list_jobs(db: Session = Depends(get_db)):
 
 
 @router.post("", response_model=Job, status_code=status.HTTP_201_CREATED)
-def create_job(body: CreateJobRequest, db: Session = Depends(get_db)):
+def create_job(
+    body: CreateJobRequest,
+    db: Session = Depends(get_db),
+    request_id: str | None = Header(None, alias="X-AI-Request-Id"),
+):
     if len(body.description.strip()) == 0:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -413,7 +422,7 @@ def create_job(body: CreateJobRequest, db: Session = Depends(get_db)):
 
     # AI is required: any model/validation failure -> honest 503, NO row.
     try:
-        generated = generate_job(body, frozen)
+        generated = generate_job(body, frozen, request_id)
     except AIError as e:
         print(e)
         raise HTTPException(
@@ -534,7 +543,12 @@ def put_job_cv(id: str, body: JobCvBody, db: Session = Depends(get_db)):
 
 # AI translate (API.md #12) — cache rule FIRST: a French CV is paid once.
 @router.post("/{id}/translate", response_model=TranslateResponse)
-def translate_job(id: str, body: TranslateRequest, db: Session = Depends(get_db)):
+def translate_job(
+    id: str,
+    body: TranslateRequest,
+    db: Session = Depends(get_db),
+    request_id: str | None = Header(None, alias="X-AI-Request-Id"),
+):
     job = db.query(JobModel).filter(JobModel.id == id).first()
     if job is None:
         raise HTTPException(
@@ -579,7 +593,7 @@ def translate_job(id: str, body: TranslateRequest, db: Session = Depends(get_db)
             "abbreviations (\"Feb 2023\" -> \"févr. 2023\"). A null endDate "
             "becomes the string \"Aujourd'hui\".\n"
         )
-        text = call(prompt)
+        text = call(prompt, request_id)
         raw = _parse_json(text)
         translated = MasterProfileResponse(**raw)  # shape must survive
         data = translated.model_dump()
@@ -622,7 +636,12 @@ def translate_job(id: str, body: TranslateRequest, db: Session = Depends(get_db)
 
 
 @router.post("/{id}/integrate-missing", response_model=IntegrateMissingResponse)
-def integrate_missing(id: str, body: IntegrateMissingRequest, db: Session = Depends(get_db)):
+def integrate_missing(
+    id: str,
+    body: IntegrateMissingRequest,
+    db: Session = Depends(get_db),
+    request_id: str | None = Header(None, alias="X-AI-Request-Id"),
+):
     job = db.query(JobModel).filter(JobModel.id == id).first()
     if job is None:
         raise HTTPException(
@@ -666,7 +685,7 @@ def integrate_missing(id: str, body: IntegrateMissingRequest, db: Session = Depe
              "5. Write in the CV's own language (French CV -> French text); "
              "tech names (GraphQL, React) stay as-is.\n"
          )
-         text = call(prompt)
+         text = call(prompt, request_id)
          raw = _parse_json(text)
          data = MasterProfileResponse(**raw).model_dump()
 
