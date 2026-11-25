@@ -719,14 +719,7 @@ function ScoreCard({
             {score}%
           </p>
         </div>
-        <span
-          className={cn(
-            "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium",
-            aiUsed
-              ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300"
-              : "border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300",
-          )}
-        >
+        <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-[11px] font-medium text-foreground">
           {aiUsed ? (
             <Sparkles className="h-3.5 w-3.5" />
           ) : (
@@ -737,25 +730,18 @@ function ScoreCard({
       </div>
       <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
         <div
-          className={cn(
-            "h-full rounded-full transition-all duration-500",
-            score >= 80
-              ? "bg-gradient-to-r from-emerald-500 to-teal-400"
-              : score >= 50
-                ? "bg-gradient-to-r from-amber-500 to-yellow-400"
-                : "bg-gradient-to-r from-red-500 to-orange-400",
-          )}
+          className="h-full rounded-full bg-foreground transition-all duration-500"
           style={{ width: `${score}%` }}
         />
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
-        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300">
+        <span className="rounded-full border border-border px-2.5 py-1 text-[11px] font-medium text-foreground">
           {matchedCount} covered
         </span>
-        <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-medium text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
+        <span className="rounded-full border border-border px-2.5 py-1 text-[11px] font-medium text-foreground">
           {missingCount} missing
         </span>
-        <span className="rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-[11px] font-medium text-orange-700 dark:border-orange-900 dark:bg-orange-950 dark:text-orange-300">
+        <span className="rounded-full border border-border px-2.5 py-1 text-[11px] font-medium text-foreground">
           {optionalCount} optional
         </span>
       </div>
@@ -777,7 +763,7 @@ function AnalysisBlock({
 }: AnalysisBlockProps) {
   return (
     <div className="rounded-xl border border-border bg-card">
-      <div className="border-b border-border px-5 py-3">
+      <div className="border-b border-border px-5 py-4">
         <p className="text-sm font-medium">Keyword scan</p>
         <p className="mt-0.5 text-[11px] text-muted-foreground">
           Updates live as you edit the CV.
@@ -785,7 +771,7 @@ function AnalysisBlock({
       </div>
       <div className="divide-y divide-border">
         {/* Matched */}
-        <section className="px-5 py-3.5">
+        <section className="px-5 py-4">
         <h2 className="text-[15px] font-medium">You already have</h2>
         {matchedLive.length === 0 ? (
           <p className="mt-1 text-[13px] text-muted-foreground">
@@ -802,7 +788,7 @@ function AnalysisBlock({
       </section>
 
       {/* Missing (required only — these drive the score) */}
-      <section className="px-5 py-3.5">
+      <section className="px-5 py-4">
         <h2 className="text-[15px] font-medium">Missing from your data</h2>
         {missingLive.length === 0 ? (
           <p className="mt-1 flex items-center gap-1.5 text-[13px] text-emerald-700 dark:text-emerald-400">
@@ -834,7 +820,7 @@ function AnalysisBlock({
 
       {/* Optional (nice-to-have) — same actions as missing, orange, no score */}
       {optionalMissing.length > 0 ? (
-        <section className="px-5 py-3.5">
+        <section className="px-5 py-4">
           <h2 className="text-[15px] font-medium">Nice to have</h2>
           <p className="mt-1 text-[13px] text-muted-foreground">
             Listed as optional in the job post — they don&apos;t affect your
