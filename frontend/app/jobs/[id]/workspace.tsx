@@ -14,12 +14,15 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { BackLink, TopBar } from "@/components/top-bar";
 import type { Job, Keyword, Language, MasterProfile } from "@/lib/types";
 import {
+  aiRequestId,
   getJob,
   integrateJob,
   patchJob,
   putCv,
   translateJob,
 } from "@/lib/jobs-store";
+import { useAiProgress } from "@/lib/use-ai-progress";
+import { AiProgressList } from "@/components/ai-progress";
 import { errMsg } from "@/lib/api";
 import { defaultCvFileName } from "@/lib/filename";
 import { analyzeKeywords, cvText, type ScanResult } from "@/lib/cv-text";
@@ -48,6 +51,8 @@ export function Workspace({ jobId }: { jobId: string }) {
   const [profile, setProfile] = useState<MasterProfile | null>(null);
   const [autofitting, setAutofitting] = useState(false);
   const [translating, setTranslating] = useState(false);
+  const [aiProgressId, setAiProgressId] = useState<string | null>(null);
+  const aiEvents = useAiProgress(aiProgressId);
   // Brief emerald ring around the sheet after an AI action — shows WHERE
   // the content changed.
   const [cvFlash, setCvFlash] = useState(false);
@@ -173,9 +178,11 @@ export function Workspace({ jobId }: { jobId: string }) {
   async function translate() {
     if (translating || !job) return;
     setTranslating(true);
+    const id = aiRequestId();
+    setAiProgressId(id);
     try {
       await flushSave(); // AI must read the latest edits
-      const r = await translateJob(job.id);
+      const r = await translateJob(job.id, id);
       setJob((prev) =>
         prev ? { ...prev, cvFr: r.cvFr, language: r.language } : prev,
       );
@@ -196,6 +203,7 @@ export function Workspace({ jobId }: { jobId: string }) {
       toast.error("Couldn't translate", { description: errMsg(e) });
     } finally {
       setTranslating(false);
+      setAiProgressId(null);
     }
   }
 
@@ -365,9 +373,11 @@ export function Workspace({ jobId }: { jobId: string }) {
     )
       return;
     setAutofitting(true);
+    const id = aiRequestId();
+    setAiProgressId(id);
     try {
       await flushSave(); // AI must read the latest edits
-      const r = await integrateJob(job.id, prompt, job.language);
+      const r = await integrateJob(job.id, prompt, job.language, id);
       setJob((prev) =>
         prev ? { ...prev, cv: r.cv, cvFr: r.cvFr } : prev,
       );
@@ -381,6 +391,7 @@ export function Workspace({ jobId }: { jobId: string }) {
       toast.error("Couldn't run the AI edit", { description: errMsg(e) });
     } finally {
       setAutofitting(false);
+      setAiProgressId(null);
     }
   }
 
@@ -430,6 +441,15 @@ export function Workspace({ jobId }: { jobId: string }) {
           </>
         }
       />
+
+      {aiEvents.length > 0 ? (
+        <div className="shrink-0 border-b border-border px-6 py-2 print:hidden">
+          <AiProgressList
+            events={aiEvents}
+            className="mx-auto max-w-[1600px]"
+          />
+        </div>
+      ) : null}
 
       {/* Single view: two independent panes on desktop — the left panel
           is fully pinned (it never moves, no matter how far you scroll) */}

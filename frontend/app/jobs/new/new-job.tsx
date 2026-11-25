@@ -6,7 +6,9 @@ import { Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { createJob } from "@/lib/jobs-store";
+import { aiRequestId, createJob } from "@/lib/jobs-store";
+import { useAiProgress } from "@/lib/use-ai-progress";
+import { AiProgressList } from "@/components/ai-progress";
 import { ApiError, errMsg, isAbortError } from "@/lib/api";
 import { TopBar, BackLink } from "@/components/top-bar";
 
@@ -18,7 +20,7 @@ function generationError(e: unknown): { title: string; description: string } {
     return {
       title: "Generation timed out",
       description:
-        "The AI didn't answer within 30 seconds. Nothing was created — try again.",
+        "The AI didn't answer in time. Nothing was created — try again.",
     };
   }
   if (e instanceof ApiError) {
@@ -60,21 +62,25 @@ export function NewJob() {
   const router = useRouter();
   const [description, setDescription] = useState("");
   const [busy, setBusy] = useState(false);
+  const [requestId, setRequestId] = useState<string | null>(null);
+  const events = useAiProgress(requestId);
 
   const canAnalyze = description.trim().length > 0;
 
   async function analyze() {
     if (!canAnalyze || busy) return;
     setBusy(true);
+    const id = aiRequestId();
+    setRequestId(id);
     try {
-      // One call: AI generates the tailored CV + keyword list; a 503 (AI
-      // down) throws → caught below, nothing was created server-side.
-      const job = await createJob(description.trim());
+      const job = await createJob(description.trim(), id);
+      setRequestId(null);
       toast.success("AI tailored your CV", {
         description: "Summary and bullets rewritten for this job.",
       });
       router.push(`/jobs/${job.id}`);
     } catch (e) {
+      setRequestId(null);
       const { title, description } = generationError(e);
       toast.error(title, { description });
       setBusy(false);
@@ -105,7 +111,7 @@ export function NewJob() {
 
           <div className="flex items-center justify-between gap-4 border-t border-border pt-5">
             <p className="text-xs text-muted-foreground">
-              Takes a few seconds — AI writes it, then you edit or print.
+              Free models can take a minute — each attempt shows below.
             </p>
             <Button onClick={analyze} disabled={!canAnalyze || busy}>
               {busy ? (
@@ -116,6 +122,10 @@ export function NewJob() {
               {busy ? "Generating CV…" : "Generate CV"}
             </Button>
           </div>
+          <AiProgressList
+            events={events}
+            className="border-t border-border pt-4"
+          />
         </div>
       </main>
     </div>
