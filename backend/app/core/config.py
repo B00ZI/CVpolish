@@ -7,6 +7,8 @@ class Settings:
         "postgresql+psycopg2://user:password@db:5432/CVpolish",
     )
     GEMINI_API_KEY: str = os.environ.get("GEMINI_API_KEY" , "")
+    GROQ_API_KEY: str = os.environ.get("GROQ_API_KEY", "")
+
     
     CORS_ORIGINS_RAW: str = os.environ.get("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")
     

@@ -8,3 +8,4 @@ psycopg2-binary==2.9.13
 google-genai==2.34.0
 pdfplumber==0.11.10
 python-multipart==0.0.32
+openai==3.58.0
