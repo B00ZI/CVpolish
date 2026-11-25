@@ -18,14 +18,19 @@ export class ApiError extends Error {
  *  FastAPI `detail` message when present (422/404 etc). */
 export async function api<T>(
   path: string,
-  init?: { method?: string; json?: unknown; timeoutMs?: number },
+  init?: {
+    method?: string;
+    json?: unknown;
+    timeoutMs?: number;
+    headers?: Record<string, string>;
+  },
 ): Promise<T> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), init?.timeoutMs ?? 30_000);
   try {
     const res = await fetch(`${BASE}${path}`, {
       method: init?.method ?? "GET",
-      headers: { "content-type": "application/json" },
+      headers: { ...init?.headers, "content-type": "application/json" },
       body: init?.json !== undefined ? JSON.stringify(init.json) : undefined,
       signal: ctrl.signal,
     });

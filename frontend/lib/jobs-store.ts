@@ -4,6 +4,7 @@
 
 import { api } from "./api";
 import type {
+  AiProgress,
   IntegrateResponse,
   Job,
   JobCard,
@@ -11,6 +12,14 @@ import type {
   MasterProfile,
   TranslateResponse,
 } from "./types";
+
+export function aiRequestId(): string {
+  return crypto.randomUUID();
+}
+
+export function getAiProgress(requestId: string): Promise<AiProgress> {
+  return api<AiProgress>(`/api/jobs/ai-progress/${requestId}`);
+}
 
 export function loadJobs(): Promise<JobCard[]> {
   return api<JobCard[]>("/api/jobs");
@@ -22,8 +31,13 @@ export function getJob(id: string): Promise<Job> {
 }
 
 /** Create + AI-tailor in one call (the product's core endpoint). */
-export function createJob(description: string): Promise<Job> {
-  return api<Job>("/api/jobs", { method: "POST", json: { description } });
+export function createJob(description: string, requestId?: string): Promise<Job> {
+  return api<Job>("/api/jobs", {
+    method: "POST",
+    json: { description },
+    timeoutMs: 70_000,
+    headers: requestId ? { "X-AI-Request-Id": requestId } : undefined,
+  });
 }
 
 export function deleteJob(id: string): Promise<void> {
@@ -53,11 +67,12 @@ export function putCv(
 }
 
 /** AI translate to French (cached server-side — repeat calls are free). */
-export function translateJob(id: string): Promise<TranslateResponse> {
+export function translateJob(id: string, requestId?: string): Promise<TranslateResponse> {
   return api<TranslateResponse>(`/api/jobs/${id}/translate`, {
     method: "POST",
     json: { target: "fr" },
-    timeoutMs: 45_000,
+    timeoutMs: 70_000,
+    headers: requestId ? { "X-AI-Request-Id": requestId } : undefined,
   });
 }
 
@@ -66,10 +81,12 @@ export function integrateJob(
   id: string,
   prompt: string,
   language: Language,
+  requestId?: string,
 ): Promise<IntegrateResponse> {
   return api<IntegrateResponse>(`/api/jobs/${id}/integrate-missing`, {
     method: "POST",
     json: { prompt, language },
-    timeoutMs: 45_000,
+    timeoutMs: 70_000,
+    headers: requestId ? { "X-AI-Request-Id": requestId } : undefined,
   });
 }

@@ -138,3 +138,15 @@ export interface IntegrateResponse {
   cv: MasterProfile;
   cvFr: MasterProfile | null;
 }
+
+// ===== Live AI fallback progress =====
+
+export interface AiProgressEvent {
+  provider: string;
+  status: "trying" | "failed" | "ok";
+  reason: string | null;
+}
+
+export interface AiProgress {
+  events: AiProgressEvent[];
+}
