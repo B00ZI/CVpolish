@@ -53,19 +53,34 @@ export function Workspace({ jobId }: { jobId: string }) {
   const [translating, setTranslating] = useState(false);
   const [aiProgressId, setAiProgressId] = useState<string | null>(null);
   const aiEvents = useAiProgress(aiProgressId);
-  // Brief emerald ring around the sheet after an AI action — shows WHERE
-  // the content changed.
-  const [cvFlash, setCvFlash] = useState(false);
-  const flashTimer = useRef<number | null>(null);
+  // The sheet glows while an AI action runs, then flashes a tiny "Updated"
+  // pill. The glow lingers 220ms after the call so it fades instead of
+  // disappearing in one frame.
+  const [glow, setGlow] = useState(false);
+  const [updated, setUpdated] = useState(false);
+  const polishing = autofitting || translating;
+  const glowTimer = useRef<number | null>(null);
+  const updatedTimer = useRef<number | null>(null);
   const hitTimer = useRef<number | null>(null);
   // Debounced PUT of the edited CV document (inline edits + quick add).
   const saveTimer = useRef<number | null>(null);
   const pendingSave = useRef<{ doc: MasterProfile; lang: Language } | null>(null);
 
-  function flashCv() {
-    setCvFlash(true);
-    if (flashTimer.current) clearTimeout(flashTimer.current);
-    flashTimer.current = window.setTimeout(() => setCvFlash(false), 2200);
+  function startPolish() {
+    if (glowTimer.current) clearTimeout(glowTimer.current);
+    glowTimer.current = null;
+    setGlow(true);
+  }
+
+  function endPolish() {
+    if (glowTimer.current) clearTimeout(glowTimer.current);
+    glowTimer.current = window.setTimeout(() => setGlow(false), 220);
+  }
+
+  function markUpdated() {
+    setUpdated(true);
+    if (updatedTimer.current) clearTimeout(updatedTimer.current);
+    updatedTimer.current = window.setTimeout(() => setUpdated(false), 1800);
   }
 
   /** Push the latest pending edit to the server (if any). AI actions await
@@ -94,7 +109,8 @@ export function Workspace({ jobId }: { jobId: string }) {
   useEffect(() => {
     return () => {
       if (hitTimer.current) clearTimeout(hitTimer.current);
-      if (flashTimer.current) clearTimeout(flashTimer.current);
+      if (glowTimer.current) clearTimeout(glowTimer.current);
+      if (updatedTimer.current) clearTimeout(updatedTimer.current);
       void flushSave(); // don't lose the last edit on navigate-away
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -178,6 +194,7 @@ export function Workspace({ jobId }: { jobId: string }) {
   async function translate() {
     if (translating || !job) return;
     setTranslating(true);
+    startPolish();
     const id = aiRequestId();
     setAiProgressId(id);
     try {
@@ -188,7 +205,7 @@ export function Workspace({ jobId }: { jobId: string }) {
       );
       if (r.language === "fr" && r.cvFr) setProfile(r.cvFr);
       if (r.aiUsed) {
-        flashCv();
+        markUpdated();
         toast.success("French version ready", {
           description:
             "AI translated it once and saved it — free to view from now on.",
@@ -204,6 +221,7 @@ export function Workspace({ jobId }: { jobId: string }) {
     } finally {
       setTranslating(false);
       setAiProgressId(null);
+      endPolish();
     }
   }
 
@@ -363,16 +381,12 @@ export function Workspace({ jobId }: { jobId: string }) {
     }));
   }
 
-  /** "Ask AI": one free-text prompt → POST integrate-missing against the
+  /** AI Editor: any free-text CV edit → POST integrate-missing against the
    *  ACTIVE document. A 503 (AI down) lands in catch — CV untouched. */
   async function autoFit(prompt: string) {
-    if (
-      autofitting ||
-      (missingLive.length === 0 && optionalMissing.length === 0) ||
-      !job
-    )
-      return;
+    if (autofitting || !job) return;
     setAutofitting(true);
+    startPolish();
     const id = aiRequestId();
     setAiProgressId(id);
     try {
@@ -383,7 +397,7 @@ export function Workspace({ jobId }: { jobId: string }) {
       );
       const doc = job.language === "fr" ? r.cvFr : r.cv;
       if (doc) setProfile(doc);
-      flashCv();
+      markUpdated();
       toast.success("AI applied your edit", {
         description: "Check the CV — your prompt was woven in.",
       });
@@ -392,6 +406,7 @@ export function Workspace({ jobId }: { jobId: string }) {
     } finally {
       setAutofitting(false);
       setAiProgressId(null);
+      endPolish();
     }
   }
 
@@ -500,13 +515,45 @@ export function Workspace({ jobId }: { jobId: string }) {
           {/* ===== Right: the live CV — scrolls independently; padding keeps
               the sheet from ending at the pane's bottom edge ===== */}
           <div className="cv-scroll min-w-0 pb-24 pr-4 print:h-auto print:overflow-visible print:pb-0 lg:h-full lg:overflow-y-auto">
-            <div
-              className={cn(
-                "mx-auto w-fit rounded-lg transition-all duration-500",
-                cvFlash && "ring-2 ring-emerald-500/70",
-              )}
-            >
-              <CvPreview profile={profile} job={job} onEditProfile={updateProfile} />
+            <div className="relative mx-auto w-fit rounded-lg">
+              <div
+                className={cn(
+                  "cv-polish-content transition-[filter] duration-300 ease-out",
+                  polishing && "blur-[1.5px] brightness-[1.04]",
+                )}
+              >
+                <CvPreview profile={profile} job={job} onEditProfile={updateProfile} />
+              </div>
+
+              {glow ? (
+                <div
+                  aria-hidden
+                  className={cn(
+                    "pointer-events-none absolute inset-0 overflow-hidden rounded-lg transition-opacity duration-200 ease-out print:hidden",
+                    !polishing && "opacity-0",
+                  )}
+                >
+                  <div className="cv-glow" />
+                </div>
+              ) : null}
+
+              {polishing ? (
+                <div className="pointer-events-none absolute left-1/2 top-4 z-10 print:hidden">
+                  <span className="cv-pill flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-border/70 bg-background/85 px-2.5 py-1 text-[11px] font-medium text-foreground shadow-sm backdrop-blur-sm">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Polishing…
+                  </span>
+                </div>
+              ) : null}
+
+              {updated ? (
+                <div className="pointer-events-none absolute left-1/2 top-4 z-10 print:hidden">
+                  <span className="cv-pill cv-pill-success flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700 shadow-sm dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300">
+                    <Check className="h-3 w-3" />
+                    Updated
+                  </span>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
@@ -843,29 +890,18 @@ function AnalysisBlock({
       ) : null}
       </div>
 
-      {/* ONE Ask AI action for both groups, in the same card. */}
-      {missingLive.length + optionalMissing.length > 0 ? (
-        <AskAiBox
-          missingCount={missingLive.length}
-          optionalCount={optionalMissing.length}
-          autofitting={autofitting}
-          onAutoFit={onAutoFit}
-        />
-      ) : null}
+      {/* Always available: the AI editor changes any part of the CV. */}
+      <AiEditorBox autofitting={autofitting} onAutoFit={onAutoFit} />
     </div>
   );
 }
 
-/** One box for both keyword groups: missing (red) + nice to have (orange).
- *  The counts make it obvious the single AI action covers them all. */
-function AskAiBox({
-  missingCount,
-  optionalCount,
+/** Free-text editor for ANY CV change — copy, projects, skills or keywords.
+ *  The prompt goes straight to the AI, no keyword gaps required. */
+function AiEditorBox({
   autofitting,
   onAutoFit,
 }: {
-  missingCount: number;
-  optionalCount: number;
   autofitting: boolean;
   onAutoFit: (prompt: string) => void;
 }) {
@@ -876,16 +912,9 @@ function AskAiBox({
     <div className="border-t border-border bg-muted/25 px-4 py-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="text-[13px] font-medium">Add keywords with AI</p>
+          <p className="text-[13px] font-medium">AI Editor</p>
           <p className="mt-0.5 text-[11px] text-muted-foreground">
-            <span className="font-medium text-red-600 dark:text-red-400">
-              {missingCount} missing
-            </span>
-            {" · "}
-            <span className="font-medium text-orange-600 dark:text-orange-400">
-              {optionalCount} nice to have
-            </span>
-            {" — one quick prompt"}
+            Edit summary, experience &amp; projects, or add missing keywords
           </p>
         </div>
         {!open ? (
@@ -896,7 +925,7 @@ function AskAiBox({
             className="shrink-0"
           >
             <Sparkles className="h-3.5 w-3.5 text-blue-600" />
-            Add with AI
+            Polish with AI
           </Button>
         ) : null}
       </div>
@@ -907,7 +936,7 @@ function AskAiBox({
             rows={3}
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            placeholder={"Describe where each missing or nice-to-have skill belongs — put it in a project or experience with how you used it, or tell the AI to add it to a skills group. Example: 'Add FastAPI to the Client Scope project, where I built the AI parsing layer' or 'Add Redis under Databases skills'."}
+            placeholder="Describe what to edit or which keywords to add…"
           />
           <div className="flex items-center gap-2">
             <Button
@@ -935,7 +964,7 @@ function AskAiBox({
               ) : (
                 <Sparkles className="h-4 w-4 text-blue-600" />
               )}
-              {autofitting ? "Fitting…" : "Generate"}
+              AI Editor
             </Button>
           </div>
         </div>
